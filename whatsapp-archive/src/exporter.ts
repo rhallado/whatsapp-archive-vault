@@ -164,6 +164,7 @@ export class ExportJob {
     await fsp.mkdir(path.join(this.workDir, "media"), { recursive: true });
 
     this.setStatus("connecting");
+    this.log("warn", SYNC_NOTICE);
     this.client = new Client({
       authStrategy: new LocalAuth({ clientId: this.clientId, dataPath: this.sessionDir }),
       puppeteer: {
