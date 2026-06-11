@@ -1,6 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import cookieParser from "cookie-parser";
-import cors from "cors";
 import path from "node:path";
 import fs from "node:fs";
 import { ExportManager } from "./exporter";
@@ -12,6 +11,7 @@ const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
 const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
+const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
   console.error("ADMIN_TOKEN ausente ou muito curto (mínimo 12 chars). Abortando.");
@@ -20,10 +20,12 @@ if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
 
 for (const d of [SESSION_DIR, EXPORT_DIR, TMP_DIR]) fs.mkdirSync(d, { recursive: true });
 
-const manager = new ExportManager({ tmp: TMP_DIR, sessions: SESSION_DIR, exports: EXPORT_DIR });
+const manager = new ExportManager(
+  { tmp: TMP_DIR, sessions: SESSION_DIR, exports: EXPORT_DIR },
+  { maxConcurrent: MAX_CONCURRENT }
+);
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
@@ -59,13 +61,23 @@ app.get("/api/export", requireAuth, (_req, res) => {
   res.json({ exports: manager.list() });
 });
 
-app.post("/api/export/start", requireAuth, async (req, res) => {
+app.post("/api/export/start", requireAuth, (req, res) => {
   try {
     const o = req.body as ExportOptions;
     if (!o?.companyName || !o?.phoneNumber || !o?.responsibleName) {
       return res.status(400).json({ error: "campos obrigatórios faltando" });
     }
-    const job = await manager.create(o);
+    const active = manager.list().filter((r) =>
+      ["created","connecting","qr_ready","authenticated","listing_chats","importing_messages","downloading_media","building_index","building_viewer","zipping"].includes(r.status)
+    ).length;
+    if (active >= MAX_CONCURRENT) {
+      return res.status(429).json({
+        error: "concurrency_limit",
+        message: `Já existe ${active} exportação ativa. Aguarde finalizar ou aumente MAX_CONCURRENT_EXPORTS.`,
+      });
+    }
+    // cria e dispara em background — não aguarda job.start()
+    const job = manager.createAndStart(o);
     res.json({ id: job.record.id });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
@@ -117,10 +129,11 @@ app.delete("/api/export/:id/cleanup", requireAuth, async (req, res) => {
 
 // ---- Admin UI estática ----
 const ADMIN_DIR = path.join(__dirname, "admin");
-app.use("/", (req, res, next) => {
-  // gate simples: tudo que não é /login.html nem /api requer cookie
+// Arquivos liberados sem autenticação (para a própria tela de login funcionar)
+const PUBLIC_FILES = new Set(["/login.html", "/style.css", "/favicon.ico"]);
+app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
-  if (req.path === "/login.html" || req.path.startsWith("/assets/") || req.path === "/favicon.ico") return next();
+  if (PUBLIC_FILES.has(req.path) || req.path.startsWith("/assets/")) return next();
   if (!authed(req)) return res.redirect("/login.html");
   next();
 });
@@ -128,4 +141,5 @@ app.use(express.static(ADMIN_DIR, { extensions: ["html"] }));
 
 app.listen(PORT, () => {
   console.log(`Telenova WA Archive online em :${PORT} (público: ${PUBLIC_URL})`);
+  console.log(`Concorrência máxima: ${MAX_CONCURRENT} exportação(ões) simultânea(s).`);
 });
