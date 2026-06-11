@@ -403,9 +403,14 @@ export class ExportJob {
 
   private async fetchChatMessages(chat: Chat, fromMs: number | null, toMs: number | null): Promise<Message[]> {
     // whatsapp-web.js carrega apenas as mensagens já sincronizadas no WhatsApp Web.
-    // Pedimos um lote grande; se faltar, retorna o que houver.
-    const limit = fromMs ? 5000 : 2000;
+    const limit = MAX_MESSAGES_PER_CHAT;
     const msgs = await chat.fetchMessages({ limit });
+    if (msgs.length >= limit) {
+      this.log(
+        "warn",
+        `chat "${chat.name}" atingiu o limite MAX_MESSAGES_PER_CHAT=${limit}. Mensagens mais antigas podem ter sido truncadas. ${SYNC_NOTICE}`
+      );
+    }
     return msgs.filter((m) => {
       const ts = (m.timestamp || 0) * 1000;
       if (fromMs && ts < fromMs) return false;
