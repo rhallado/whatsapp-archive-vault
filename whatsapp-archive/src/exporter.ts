@@ -292,12 +292,15 @@ export class ExportJob {
                 if (media && media.data) {
                   await fsp.mkdir(chatMediaDir, { recursive: true });
                   const ext = extForMime(media.mimetype);
-                  const fname = safeName(media.filename || `${norm.id}.${ext}`);
+                  // sempre prefixa com messageId/uuid para evitar colisões
+                  const uid = (norm.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);
+                  const baseFromWa = media.filename ? safeName(media.filename) : `${uid}.${ext}`;
+                  const fname = media.filename ? `${uid}__${baseFromWa}` : baseFromWa;
                   const rel = path.posix.join("media", chatId, fname);
                   const abs = path.join(this.workDir, rel);
                   await fsp.writeFile(abs, Buffer.from(media.data, "base64"));
                   norm.mediaPath = rel;
-                  norm.fileName = fname;
+                  norm.fileName = media.filename ? safeName(media.filename) : fname;
                   norm.mimeType = media.mimetype;
                   this.record.progress.mediaDownloaded += 1;
                 }
