@@ -330,6 +330,7 @@ export class ExportJob {
           await fsp.writeFile(path.join(this.workDir, messagesFile), payload, "utf8");
 
           const last = normalized.at(-1);
+          const mediaCount = normalized.filter((n) => !!n.mediaPath).length;
           chatManifest.push({
             id: chatId,
             name: chat.name || (chat as unknown as { formattedTitle?: string }).formattedTitle || chat.id._serialized,
@@ -338,6 +339,8 @@ export class ExportJob {
             totalMessages: normalized.length,
             lastMessageAt: last ? last.timestamp : null,
             messagesFile,
+            hasMedia: mediaCount > 0,
+            mediaCount,
           });
 
           this.record.progress.chatsImported += 1;
