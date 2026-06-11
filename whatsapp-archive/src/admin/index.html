@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Telenova WhatsApp Archive Exporter</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>Telenova</strong>
+    <span>WhatsApp Archive Exporter</span>
+  </div>
+  <nav>
+    <button id="tab-new" class="tab active">Nova exportação</button>
+    <button id="tab-list" class="tab">Exportações</button>
+    <button id="logout" class="ghost">Sair</button>
+  </nav>
+</header>
+
+<main>
+  <!-- NEW EXPORT -->
+  <section id="view-new" class="view">
+    <div class="card">
+      <h2>Nova exportação</h2>
+      <p class="warn">
+        ⚠ Esta ferramenta acessa temporariamente o WhatsApp Web autorizado pelo cliente
+        apenas para importar histórico. Nenhuma mensagem será enviada. O arquivo gerado
+        pode conter dados pessoais e deve ser armazenado com segurança (LGPD).
+      </p>
+      <form id="form-new" class="grid">
+        <label>Nome da empresa<input name="companyName" required /></label>
+        <label>Número WhatsApp<input name="phoneNumber" required placeholder="556599999999" /></label>
+        <label>Nome do responsável<input name="responsibleName" required /></label>
+        <label class="full">Observações<textarea name="notes" rows="2"></textarea></label>
+
+        <fieldset>
+          <legend>Período</legend>
+          <label class="row"><input type="radio" name="range" value="all" checked /> Tudo</label>
+          <label class="row"><input type="radio" name="range" value="30" /> Últimos 30 dias</label>
+          <label class="row"><input type="radio" name="range" value="90" /> Últimos 90 dias</label>
+          <label class="row"><input type="radio" name="range" value="180" /> Últimos 180 dias</label>
+          <label class="row"><input type="radio" name="range" value="custom" /> Personalizado</label>
+          <div class="row custom-range">
+            <input type="date" name="fromDate" />
+            <span>até</span>
+            <input type="date" name="toDate" />
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Conteúdo</legend>
+          <label class="row"><input type="checkbox" name="includeGroups" checked /> Importar grupos</label>
+          <label class="row"><input type="checkbox" name="includeMedia" checked /> Importar mídia</label>
+          <label class="row"><input type="checkbox" name="includeDocuments" checked /> Importar documentos</label>
+          <label class="row"><input type="checkbox" name="includeAudio" checked /> Importar áudios</label>
+          <label class="row"><input type="checkbox" name="includeVideo" checked /> Importar vídeos</label>
+        </fieldset>
+
+        <div class="full actions">
+          <button type="submit" class="primary">Iniciar exportação</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- LIST -->
+  <section id="view-list" class="view hidden">
+    <div class="card">
+      <h2>Exportações recentes</h2>
+      <div id="list"></div>
+    </div>
+  </section>
+
+  <!-- DETAIL -->
+  <section id="view-detail" class="view hidden">
+    <div class="card">
+      <button id="back" class="ghost">← Voltar</button>
+      <h2 id="d-title">Exportação</h2>
+      <div class="status-row">
+        <span class="badge" id="d-status">—</span>
+        <span class="muted" id="d-elapsed">0s</span>
+      </div>
+
+      <div id="d-qr" class="qr hidden">
+        <p>Abra o WhatsApp Business no celular do cliente → <em>Aparelhos conectados</em> → escaneie:</p>
+        <img id="d-qr-img" alt="QR Code" />
+      </div>
+
+      <div class="progress-grid">
+        <div><span class="muted">Chats encontrados</span><strong id="p-found">0</strong></div>
+        <div><span class="muted">Chats importados</span><strong id="p-imp">0</strong></div>
+        <div><span class="muted">Mensagens</span><strong id="p-msg">0</strong></div>
+        <div><span class="muted">Mídias baixadas</span><strong id="p-media">0</strong></div>
+        <div><span class="muted">Mídias falhas</span><strong id="p-mediaf">0</strong></div>
+        <div><span class="muted">Erros</span><strong id="p-err">0</strong></div>
+      </div>
+
+      <div class="actions">
+        <a id="d-download" class="primary disabled" href="#">Baixar ZIP</a>
+        <button id="d-cancel" class="warning">Cancelar</button>
+        <button id="d-disconnect" class="ghost">Desconectar WhatsApp</button>
+        <button id="d-cleanup" class="danger">Apagar dados temporários</button>
+      </div>
+
+      <h3>Logs</h3>
+      <pre id="d-logs" class="logs"></pre>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

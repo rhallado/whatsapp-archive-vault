@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<title>Como usar — Histórico WhatsApp (Telenova Archive)</title>
+<style>
+  body{font-family:ui-sans-serif,system-ui,Arial,sans-serif;background:#0b1220;color:#e6edf6;max-width:780px;margin:40px auto;padding:0 20px;line-height:1.55}
+  h1,h2{color:#22d3ee} a{color:#22d3ee} code{background:#111c2e;padding:2px 6px;border-radius:4px}
+  .box{background:#111c2e;border:1px solid #1f2a3d;padding:14px 18px;border-radius:10px;margin:18px 0}
+  .warn{border-color:#5b4a1d;background:#221d10;color:#ffe7b5}
+</style>
+</head>
+<body>
+<h1>Histórico WhatsApp — Telenova Archive</h1>
+<p>Este pacote contém uma cópia do seu histórico de conversas do WhatsApp Business no momento da exportação. Ele <strong>funciona 100% offline</strong> — sem internet, sem servidor e sem instalação.</p>
+
+<h2>Como abrir</h2>
+<ol>
+  <li>Descompacte o arquivo <code>.zip</code> em qualquer pasta do seu computador.</li>
+  <li>Dentro da pasta extraída, dê duplo-clique em <code>index.html</code>.</li>
+  <li>O navegador (Chrome, Firefox, Edge, Safari) abrirá o visualizador.</li>
+</ol>
+
+<h2>Estrutura do pacote</h2>
+<pre><code>historico-whatsapp-&lt;empresa&gt;/
+├── index.html        ← abra este arquivo
+├── app.js
+├── style.css
+├── manifest.json
+├── README.html       ← este arquivo
+├── data/             ← conversas e índice de busca
+└── media/            ← imagens, áudios, vídeos e documentos
+</code></pre>
+
+<div class="box warn">
+  <strong>⚠ Guarde este arquivo com segurança.</strong>
+  Ele contém dados pessoais (mensagens, telefones, mídias). A <strong>Telenova não armazena</strong> nem
+  se responsabiliza por perda, vazamento ou exclusão deste pacote após a entrega. Recomendamos
+  armazenamento criptografado e backup em local seguro.
+</div>
+
+<h2>Observações importantes</h2>
+<ul>
+  <li>Mensagens <strong>apagadas</strong> antes da exportação não aparecem (apenas o marcador "mensagem apagada", quando disponível).</li>
+  <li>Mídias <strong>expiradas</strong>, mensagens <strong>temporárias</strong> ou conteúdo nunca sincronizado com o WhatsApp Web podem não aparecer.</li>
+  <li>O visualizador é <strong>somente leitura</strong>. Não envia mensagens nem se conecta ao WhatsApp.</li>
+</ul>
+
+<h2>Suporte</h2>
+<p>Em caso de dúvidas sobre a abertura do arquivo, contate a equipe Telenova que realizou a exportação.</p>
+</body>
+</html>

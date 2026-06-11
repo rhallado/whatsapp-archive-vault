@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Histórico WhatsApp — Telenova Archive</title>
+<link rel="stylesheet" href="style.css" />
+<script src="data/manifest.js"></script>
+<script src="data/chats.js"></script>
+<script src="data/search_index.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>Histórico WhatsApp</strong>
+    <span id="hdr-company"></span>
+  </div>
+  <div class="meta">
+    <span id="hdr-phone"></span>
+    <span id="hdr-date"></span>
+    <span id="hdr-totals"></span>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <div class="search">
+      <input id="search" placeholder="Buscar nome, telefone ou mensagem…" />
+    </div>
+    <div class="filters">
+      <label><input type="radio" name="f" value="all" checked> Todos</label>
+      <label><input type="radio" name="f" value="individual"> Individuais</label>
+      <label><input type="radio" name="f" value="group"> Grupos</label>
+      <label><input type="radio" name="f" value="media"> Com mídia</label>
+    </div>
+    <ul id="chat-list" class="chat-list"></ul>
+    <div id="search-results" class="search-results hidden"></div>
+  </aside>
+
+  <section class="conversation">
+    <div id="conv-header" class="conv-header">
+      <div>
+        <h2 id="conv-name">Selecione uma conversa</h2>
+        <span id="conv-sub" class="muted"></span>
+      </div>
+    </div>
+    <div id="conv-body" class="conv-body">
+      <div class="placeholder">
+        <p>Selecione uma conversa à esquerda ou use a busca global.</p>
+        <p class="muted">Arquivo offline — funciona sem internet.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

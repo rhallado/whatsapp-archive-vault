@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Login — Telenova WhatsApp Archive</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <h1>Telenova<span>WhatsApp Archive</span></h1>
+    <p class="muted">Acesso restrito. Informe o token administrativo.</p>
+    <form id="f">
+      <input type="password" id="t" placeholder="ADMIN_TOKEN" autocomplete="current-password" required />
+      <button type="submit">Entrar</button>
+    </form>
+    <p id="err" class="error"></p>
+  </main>
+  <script>
+    const f = document.getElementById('f'), t = document.getElementById('t'), err = document.getElementById('err');
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); err.textContent = '';
+      const r = await fetch('/api/auth/login', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ token: t.value })
+      });
+      if (r.ok) location.href = '/'; else err.textContent = 'Token inválido.';
+    });
+  </script>
+</body>
+</html>
