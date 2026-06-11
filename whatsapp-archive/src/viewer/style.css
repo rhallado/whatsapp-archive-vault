@@ -1,0 +1,64 @@
+:root{
+  --bg:#0b1220; --bg2:#0f172a; --panel:#111c2e; --panel2:#0c1424;
+  --line:#1f2a3d; --text:#e6edf6; --muted:#8aa0bd;
+  --primary:#22d3ee; --accent:#3b82f6;
+  --bubble-in:#1a2438; --bubble-out:#0e3a3f; --bubble-out-2:#0b4d52;
+  --shadow:0 4px 14px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+.muted{color:var(--muted)}
+.hidden{display:none!important}
+
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:linear-gradient(180deg,#0e1a30,#0b1220);border-bottom:1px solid var(--line)}
+.brand strong{font-size:16px}
+.brand span{margin-left:10px;color:var(--muted);font-size:13px}
+.meta{display:flex;gap:14px;color:var(--muted);font-size:12px}
+
+.layout{display:grid;grid-template-columns:340px 1fr;height:calc(100vh - 52px)}
+.sidebar{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.search{padding:10px}
+.search input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--text);font:inherit}
+.search input:focus{outline:none;border-color:var(--primary)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;padding:0 10px 8px;font-size:12px;color:var(--muted)}
+.filters label{display:flex;gap:4px;align-items:center}
+.chat-list{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1}
+.chat-list li{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.chat-list li:hover{background:#13213a}
+.chat-list li.active{background:#15263f}
+.chat-list .cname{font-weight:600;font-size:14px;display:flex;justify-content:space-between;gap:6px}
+.chat-list .csub{font-size:11px;color:var(--muted)}
+.chat-list .tag{font-size:10px;padding:1px 6px;border-radius:999px;background:#1d3854;color:#9ec8ff}
+
+.search-results{overflow-y:auto;padding:6px 10px}
+.search-results .res{padding:10px;border-bottom:1px solid var(--line);cursor:pointer}
+.search-results .res:hover{background:#13213a}
+.search-results .res .hi{color:var(--primary)}
+
+.conversation{display:flex;flex-direction:column;min-width:0;background:#0a1120}
+.conv-header{padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.conv-header h2{margin:0;font-size:16px}
+.conv-body{flex:1;overflow-y:auto;padding:16px 22px;background:
+  linear-gradient(180deg,rgba(255,255,255,.01),transparent),#08101e}
+.placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);text-align:center}
+
+.date-sep{text-align:center;margin:14px 0;color:var(--muted);font-size:11px}
+.date-sep span{background:#13213a;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+
+.msg{max-width:70%;margin:4px 0;padding:8px 12px 6px;border-radius:10px;background:var(--bubble-in);box-shadow:var(--shadow);position:relative;word-wrap:break-word}
+.msg.me{margin-left:auto;background:linear-gradient(135deg,var(--bubble-out),var(--bubble-out-2))}
+.msg .sender{font-size:11px;color:var(--primary);margin-bottom:2px;font-weight:600}
+.msg .body{white-space:pre-wrap;font-size:14px;line-height:1.4}
+.msg .body mark{background:rgba(34,211,238,.35);color:inherit;padding:0 2px;border-radius:3px}
+.msg .time{font-size:10px;color:var(--muted);text-align:right;margin-top:2px}
+.msg.system{background:#1a1f2e;color:var(--muted);font-style:italic;text-align:center;margin:6px auto;max-width:80%}
+.msg img.media{max-width:280px;border-radius:6px;display:block;margin-top:6px}
+.msg video.media,.msg audio.media{max-width:280px;display:block;margin-top:6px}
+.msg .doc{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);padding:8px 10px;border-radius:6px;margin-top:6px;color:var(--text);text-decoration:none}
+.msg .doc::before{content:"📎"}
+.msg.highlight{outline:2px solid var(--primary);outline-offset:2px}
+
+@media (max-width:760px){
+  .layout{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .sidebar{max-height:42vh}
+}
