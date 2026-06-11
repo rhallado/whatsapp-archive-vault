@@ -506,7 +506,10 @@ export class ExportJob {
 
 export class ExportManager {
   private jobs = new Map<string, ExportJob>();
-  constructor(private dirs: { tmp: string; sessions: string; exports: string }) {}
+  constructor(
+    private dirs: { tmp: string; sessions: string; exports: string },
+    private opts: { maxConcurrent: number } = { maxConcurrent: 1 }
+  ) {}
 
   list(): ExportRecord[] {
     return Array.from(this.jobs.values())
@@ -515,11 +518,26 @@ export class ExportManager {
   }
   get(id: string) { return this.jobs.get(id); }
 
-  async create(opts: ExportOptions): Promise<ExportJob> {
+  activeCount(): number {
+    const ACTIVE: ExportRecord["status"][] = [
+      "created","connecting","qr_ready","authenticated","listing_chats",
+      "importing_messages","downloading_media","building_index","building_viewer","zipping",
+    ];
+    return this.list().filter((r) => ACTIVE.includes(r.status)).length;
+  }
+
+  /** Cria o job e dispara start() em background. Retorna imediatamente. */
+  createAndStart(opts: ExportOptions): ExportJob {
+    if (this.activeCount() >= this.opts.maxConcurrent) {
+      throw new Error(`limite de ${this.opts.maxConcurrent} exportação(ões) ativa(s) atingido`);
+    }
     const id = crypto.randomUUID().slice(0, 8);
     const job = new ExportJob(id, opts, this.dirs);
     this.jobs.set(id, job);
-    await job.start();
+    // dispara sem aguardar
+    job.start().catch((e) => {
+      job.log("error", `start falhou: ${(e as Error).message}`);
+    });
     return job;
   }
 
