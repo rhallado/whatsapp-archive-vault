@@ -1,0 +1,29 @@
+services:
+  telenova-wa-archive:
+    build: ./whatsapp-archive
+    image: telenova/wa-archive:latest
+    container_name: telenova-wa-archive
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3001}:3000"
+    environment:
+      PORT: "3000"
+      PUBLIC_URL: "${PUBLIC_URL:-http://localhost:3001}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:?ADMIN_TOKEN é obrigatório}"
+      SESSION_DIR: "/data/sessions"
+      EXPORT_DIR: "/data/exports"
+      TMP_DIR: "/data/tmp"
+      EXPORTER_VERSION: "1.0.0"
+    volumes:
+      - wa_sessions:/data/sessions
+      - wa_exports:/data/exports
+      - wa_tmp:/data/tmp
+    # Necessário para Chromium headless dentro de container
+    shm_size: "1gb"
+    cap_add:
+      - SYS_ADMIN
+
+volumes:
+  wa_sessions:
+  wa_exports:
+  wa_tmp:
