@@ -459,18 +459,27 @@ export class ExportJob {
         audio: o.includeAudio,
         video: o.includeVideo,
       },
+      notice: SYNC_NOTICE,
+      limits: { maxMessagesPerChat: MAX_MESSAGES_PER_CHAT },
     };
     await fsp.writeFile(
       path.join(this.workDir, "manifest.json"),
       JSON.stringify(manifest, null, 2),
       "utf8"
     );
-    // Versão JS para o viewer (evita fetch de file://)
     await fsp.writeFile(
       path.join(this.workDir, "data/manifest.js"),
       `window.MANIFEST = ${JSON.stringify(manifest)};\n`,
       "utf8"
     );
+    const notice =
+      `Telenova WhatsApp Archive\n` +
+      `==========================\n\n` +
+      `${SYNC_NOTICE}\n\n` +
+      `Limite por chat nesta exportação: ${MAX_MESSAGES_PER_CHAT} mensagens (MAX_MESSAGES_PER_CHAT).\n` +
+      `Empresa: ${o.companyName}\nTelefone: ${o.phoneNumber}\nResponsável: ${o.responsibleName}\n` +
+      `Exportado em: ${nowIso()}\nExportID: ${this.record.id}\n`;
+    await fsp.writeFile(path.join(this.workDir, "AVISO.txt"), notice, "utf8");
   }
 
   private async zipResult(): Promise<string> {
