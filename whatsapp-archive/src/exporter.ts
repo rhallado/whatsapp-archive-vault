@@ -17,6 +17,11 @@ import type {
 
 const VIEWER_DIR = path.join(__dirname, "viewer");
 const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.0.0";
+const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
+
+const SYNC_NOTICE =
+  "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
+  "Mensagens antigas que o WhatsApp ainda não baixou para a sessão podem não aparecer.";
 
 function nowIso() {
   return new Date().toISOString();
