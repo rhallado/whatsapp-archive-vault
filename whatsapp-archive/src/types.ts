@@ -71,6 +71,8 @@ export interface ChatManifestEntry {
   totalMessages: number;
   lastMessageAt: string | null;
   messagesFile: string;
+  hasMedia: boolean;
+  mediaCount: number;
 }
 
 export interface NormalizedMessage {

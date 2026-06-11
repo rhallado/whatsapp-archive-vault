@@ -14,14 +14,17 @@ services:
       EXPORT_DIR: "/data/exports"
       TMP_DIR: "/data/tmp"
       EXPORTER_VERSION: "1.0.0"
+      MAX_MESSAGES_PER_CHAT: "${MAX_MESSAGES_PER_CHAT:-20000}"
+      MAX_CONCURRENT_EXPORTS: "${MAX_CONCURRENT_EXPORTS:-1}"
     volumes:
       - wa_sessions:/data/sessions
       - wa_exports:/data/exports
       - wa_tmp:/data/tmp
-    # Necessário para Chromium headless dentro de container
+    # Chromium headless precisa de mais shared memory.
+    # NÃO usamos cap_add SYS_ADMIN — o Chromium roda com --no-sandbox
+    # dentro do container, que já está isolado. Mantemos o container
+    # com o menor privilégio possível.
     shm_size: "1gb"
-    cap_add:
-      - SYS_ADMIN
 
 volumes:
   wa_sessions:

@@ -17,6 +17,11 @@ import type {
 
 const VIEWER_DIR = path.join(__dirname, "viewer");
 const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.0.0";
+const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
+
+const SYNC_NOTICE =
+  "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
+  "Mensagens antigas que o WhatsApp ainda não baixou para a sessão podem não aparecer.";
 
 function nowIso() {
   return new Date().toISOString();
@@ -159,6 +164,7 @@ export class ExportJob {
     await fsp.mkdir(path.join(this.workDir, "media"), { recursive: true });
 
     this.setStatus("connecting");
+    this.log("warn", SYNC_NOTICE);
     this.client = new Client({
       authStrategy: new LocalAuth({ clientId: this.clientId, dataPath: this.sessionDir }),
       puppeteer: {
@@ -286,12 +292,15 @@ export class ExportJob {
                 if (media && media.data) {
                   await fsp.mkdir(chatMediaDir, { recursive: true });
                   const ext = extForMime(media.mimetype);
-                  const fname = safeName(media.filename || `${norm.id}.${ext}`);
+                  // sempre prefixa com messageId/uuid para evitar colisões
+                  const uid = (norm.id || crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);
+                  const baseFromWa = media.filename ? safeName(media.filename) : `${uid}.${ext}`;
+                  const fname = media.filename ? `${uid}__${baseFromWa}` : baseFromWa;
                   const rel = path.posix.join("media", chatId, fname);
                   const abs = path.join(this.workDir, rel);
                   await fsp.writeFile(abs, Buffer.from(media.data, "base64"));
                   norm.mediaPath = rel;
-                  norm.fileName = fname;
+                  norm.fileName = media.filename ? safeName(media.filename) : fname;
                   norm.mimeType = media.mimetype;
                   this.record.progress.mediaDownloaded += 1;
                 }
@@ -321,6 +330,7 @@ export class ExportJob {
           await fsp.writeFile(path.join(this.workDir, messagesFile), payload, "utf8");
 
           const last = normalized.at(-1);
+          const mediaCount = normalized.filter((n) => !!n.mediaPath).length;
           chatManifest.push({
             id: chatId,
             name: chat.name || (chat as unknown as { formattedTitle?: string }).formattedTitle || chat.id._serialized,
@@ -329,6 +339,8 @@ export class ExportJob {
             totalMessages: normalized.length,
             lastMessageAt: last ? last.timestamp : null,
             messagesFile,
+            hasMedia: mediaCount > 0,
+            mediaCount,
           });
 
           this.record.progress.chatsImported += 1;
@@ -391,9 +403,14 @@ export class ExportJob {
 
   private async fetchChatMessages(chat: Chat, fromMs: number | null, toMs: number | null): Promise<Message[]> {
     // whatsapp-web.js carrega apenas as mensagens já sincronizadas no WhatsApp Web.
-    // Pedimos um lote grande; se faltar, retorna o que houver.
-    const limit = fromMs ? 5000 : 2000;
+    const limit = MAX_MESSAGES_PER_CHAT;
     const msgs = await chat.fetchMessages({ limit });
+    if (msgs.length >= limit) {
+      this.log(
+        "warn",
+        `chat "${chat.name}" atingiu o limite MAX_MESSAGES_PER_CHAT=${limit}. Mensagens mais antigas podem ter sido truncadas. ${SYNC_NOTICE}`
+      );
+    }
     return msgs.filter((m) => {
       const ts = (m.timestamp || 0) * 1000;
       if (fromMs && ts < fromMs) return false;
@@ -442,18 +459,27 @@ export class ExportJob {
         audio: o.includeAudio,
         video: o.includeVideo,
       },
+      notice: SYNC_NOTICE,
+      limits: { maxMessagesPerChat: MAX_MESSAGES_PER_CHAT },
     };
     await fsp.writeFile(
       path.join(this.workDir, "manifest.json"),
       JSON.stringify(manifest, null, 2),
       "utf8"
     );
-    // Versão JS para o viewer (evita fetch de file://)
     await fsp.writeFile(
       path.join(this.workDir, "data/manifest.js"),
       `window.MANIFEST = ${JSON.stringify(manifest)};\n`,
       "utf8"
     );
+    const notice =
+      `Telenova WhatsApp Archive\n` +
+      `==========================\n\n` +
+      `${SYNC_NOTICE}\n\n` +
+      `Limite por chat nesta exportação: ${MAX_MESSAGES_PER_CHAT} mensagens (MAX_MESSAGES_PER_CHAT).\n` +
+      `Empresa: ${o.companyName}\nTelefone: ${o.phoneNumber}\nResponsável: ${o.responsibleName}\n` +
+      `Exportado em: ${nowIso()}\nExportID: ${this.record.id}\n`;
+    await fsp.writeFile(path.join(this.workDir, "AVISO.txt"), notice, "utf8");
   }
 
   private async zipResult(): Promise<string> {
@@ -480,7 +506,10 @@ export class ExportJob {
 
 export class ExportManager {
   private jobs = new Map<string, ExportJob>();
-  constructor(private dirs: { tmp: string; sessions: string; exports: string }) {}
+  constructor(
+    private dirs: { tmp: string; sessions: string; exports: string },
+    private opts: { maxConcurrent: number } = { maxConcurrent: 1 }
+  ) {}
 
   list(): ExportRecord[] {
     return Array.from(this.jobs.values())
@@ -489,11 +518,26 @@ export class ExportManager {
   }
   get(id: string) { return this.jobs.get(id); }
 
-  async create(opts: ExportOptions): Promise<ExportJob> {
+  activeCount(): number {
+    const ACTIVE: ExportRecord["status"][] = [
+      "created","connecting","qr_ready","authenticated","listing_chats",
+      "importing_messages","downloading_media","building_index","building_viewer","zipping",
+    ];
+    return this.list().filter((r) => ACTIVE.includes(r.status)).length;
+  }
+
+  /** Cria o job e dispara start() em background. Retorna imediatamente. */
+  createAndStart(opts: ExportOptions): ExportJob {
+    if (this.activeCount() >= this.opts.maxConcurrent) {
+      throw new Error(`limite de ${this.opts.maxConcurrent} exportação(ões) ativa(s) atingido`);
+    }
     const id = crypto.randomUUID().slice(0, 8);
     const job = new ExportJob(id, opts, this.dirs);
     this.jobs.set(id, job);
-    await job.start();
+    // dispara sem aguardar
+    job.start().catch((e) => {
+      job.log("error", `start falhou: ${(e as Error).message}`);
+    });
     return job;
   }
 

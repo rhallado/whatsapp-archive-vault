@@ -22,7 +22,7 @@
     const filtered = CHATS.filter((c) => {
       if (currentFilter === 'individual' && c.isGroup) return false;
       if (currentFilter === 'group' && !c.isGroup) return false;
-      if (currentFilter === 'media' && !c.hasMedia) { /* hint optional */ }
+      if (currentFilter === 'media' && !c.hasMedia) return false;
       if (term) {
         const hay = `${c.name} ${c.phone}`.toLowerCase();
         if (!hay.includes(term)) return false;
