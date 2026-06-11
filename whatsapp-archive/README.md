@@ -53,22 +53,32 @@ cp .env.example .env
 
 ### 2. Suba com docker-compose
 
+Use o `docker-compose.yml` que está na **raiz do repositório** (ele aponta o build para `./whatsapp-archive`):
+
 ```bash
+docker compose up -d --build
+```
+
+Ou, se preferir usar o compose dentro desta pasta:
+
+```bash
+cd whatsapp-archive
 docker compose up -d --build
 ```
 
 Acesse: `http://<seu-host>:3001` → faça login com o `ADMIN_TOKEN`.
 
-### 3. Deploy no Portainer
+### 3. Deploy no Portainer (Stack from Git)
 
-1. Portainer → **Stacks** → **Add stack**.
-2. Cole o conteúdo de `docker-compose.yml`.
-3. Na seção **Environment variables**, adicione:
+1. Portainer → **Stacks** → **Add stack** → **Repository**.
+2. Cole a URL do repositório GitHub.
+3. Em **Compose path**, deixe `docker-compose.yml` (na raiz do repo).
+4. Na seção **Environment variables**, adicione:
    - `ADMIN_TOKEN` = (gere um valor longo e aleatório)
    - `PUBLIC_URL` = `http://190.89.248.194:3001` (ou seu domínio)
    - `HOST_PORT` = `3001`
-4. **Deploy the stack**.
-5. (Opcional) Configure um reverse proxy (Nginx/Caddy/Traefik) na frente
+5. **Deploy the stack**.
+6. (Opcional) Configure um reverse proxy (Nginx/Caddy/Traefik) na frente
    apontando para o container e use HTTPS com domínio próprio.
 
 > **HTTPS recomendado em produção.** Sem TLS, o `ADMIN_TOKEN` trafega em texto claro.
