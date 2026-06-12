@@ -76,7 +76,8 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    callback(ext === ".csv" || ext === ".vcf" ? null : new Error("agenda deve ser .csv ou .vcf"), ext === ".csv" || ext === ".vcf");
+    if (ext !== ".csv" && ext !== ".vcf") return callback(new Error("agenda deve ser .csv ou .vcf"));
+    callback(null, true);
   },
 });
 
