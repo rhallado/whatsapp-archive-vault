@@ -536,11 +536,36 @@ export class ExportJob {
   private async fetchChatMessages(chat: Chat, fromMs: number | null, toMs: number | null): Promise<Message[]> {
     // whatsapp-web.js carrega apenas as mensagens já sincronizadas no WhatsApp Web.
     const limit = MAX_MESSAGES_PER_CHAT;
-    const msgs = await chat.fetchMessages({ limit });
+    const chatLabel = chat.name || chat.id?._serialized || "chat sem identificação";
+    const maybeSync = (chat as unknown as { syncHistory?: () => Promise<unknown> }).syncHistory;
+
+    if (DEEP_HISTORY_MODE && typeof maybeSync === "function") {
+      this.log("info", `sincronizando histórico do chat "${chatLabel}"`);
+      await Promise.race([
+        maybeSync.call(chat),
+        sleep(CHAT_SYNC_TIMEOUT_MS).then(() => "timeout"),
+      ]).catch((e) => {
+        this.log("warn", `syncHistory falhou no chat "${chatLabel}": ${(e as Error).message}`);
+      });
+    }
+
+    let msgs = await chat.fetchMessages({ limit });
+    for (let attempt = 1; attempt <= FETCH_RETRY_COUNT; attempt += 1) {
+      if (!DEEP_HISTORY_MODE || msgs.length >= limit) break;
+      await sleep(FETCH_RETRY_DELAY_MS);
+      const again = await chat.fetchMessages({ limit });
+      if (again.length <= msgs.length) break;
+      msgs = again;
+    }
+
+    this.log("info", `chat "${chatLabel}" fetchMessages retornou ${msgs.length} mensagens`);
+    if (msgs.length <= 3) {
+      this.log("warn", `chat "${chatLabel}" retornou apenas ${msgs.length} mensagem(ns); provável histórico não sincronizado no WhatsApp Web`);
+    }
     if (msgs.length >= limit) {
       this.log(
         "warn",
-        `chat "${chat.name}" atingiu o limite MAX_MESSAGES_PER_CHAT=${limit}. Mensagens mais antigas podem ter sido truncadas. ${SYNC_NOTICE}`
+        `chat "${chatLabel}" atingiu o limite MAX_MESSAGES_PER_CHAT=${limit}. Mensagens mais antigas podem ter sido truncadas. ${SYNC_NOTICE}`
       );
     }
     return msgs.filter((m) => {
@@ -592,7 +617,12 @@ export class ExportJob {
         video: o.includeVideo,
       },
       notice: SYNC_NOTICE,
-      limits: { maxMessagesPerChat: MAX_MESSAGES_PER_CHAT },
+      limits: {
+        maxMessagesPerChat: MAX_MESSAGES_PER_CHAT,
+        deepHistoryMode: DEEP_HISTORY_MODE,
+        initialSyncWaitMs: INITIAL_SYNC_WAIT_MS,
+        fetchRetryCount: FETCH_RETRY_COUNT,
+      },
     };
     await fsp.writeFile(
       path.join(this.workDir, "manifest.json"),
@@ -609,6 +639,8 @@ export class ExportJob {
       `==========================\n\n` +
       `${SYNC_NOTICE}\n\n` +
       `Limite por chat nesta exportação: ${MAX_MESSAGES_PER_CHAT} mensagens (MAX_MESSAGES_PER_CHAT).\n` +
+      `Mesmo com um limite alto, chats podem retornar poucas mensagens quando o histórico não está sincronizado.\n` +
+      `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE} tenta melhorar a sincronização, mas não garante 100% do histórico.\n` +
       `Empresa: ${o.companyName}\nTelefone: ${o.phoneNumber}\nResponsável: ${o.responsibleName}\n` +
       `Exportado em: ${nowIso()}\nExportID: ${this.record.id}\n`;
     await fsp.writeFile(path.join(this.workDir, "AVISO.txt"), notice, "utf8");
