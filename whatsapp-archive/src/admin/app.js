@@ -1,4 +1,10 @@
 (() => {
+  // version
+  fetch('/api/version').then(r => r.json()).then(j => {
+    const el = document.getElementById('version');
+    if (el && j.version) el.textContent = 'v' + j.version;
+  }).catch(() => {});
+
   const $ = (id) => document.getElementById(id);
   const views = { new: $('view-new'), list: $('view-list'), detail: $('view-detail') };
   const tabs = { new: $('tab-new'), list: $('tab-list') };

@@ -72,6 +72,10 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
 .login-card form{display:flex;flex-direction:column;gap:10px;margin-top:18px}
 .error{color:#ffb4b9;min-height:18px;margin-top:8px}
 
+/* footer */
+.footer{text-align:center;padding:18px 22px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:12px}
+.footer #version{color:var(--primary);font-weight:600}
+
 @media (max-width:720px){
   .grid{grid-template-columns:1fr}
   .progress-grid{grid-template-columns:repeat(2,1fr)}
