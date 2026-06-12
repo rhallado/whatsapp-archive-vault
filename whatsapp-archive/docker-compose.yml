@@ -16,6 +16,11 @@ services:
       EXPORTER_VERSION: "1.0.0"
       MAX_MESSAGES_PER_CHAT: "${MAX_MESSAGES_PER_CHAT:-20000}"
       MAX_CONCURRENT_EXPORTS: "${MAX_CONCURRENT_EXPORTS:-1}"
+      SAFE_MODE: "${SAFE_MODE:-true}"
+      CHAT_DELAY_MS: "${CHAT_DELAY_MS:-2500}"
+      MEDIA_DELAY_MS: "${MEDIA_DELAY_MS:-800}"
+      MAX_CHATS_PER_RUN: "${MAX_CHATS_PER_RUN:-0}"
+      MAX_MEDIA_PER_RUN: "${MAX_MEDIA_PER_RUN:-0}"
     volumes:
       - wa_sessions:/data/sessions
       - wa_exports:/data/exports

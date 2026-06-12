@@ -14,6 +14,8 @@ export interface ExportOptions {
   includeDocuments: boolean;
   includeAudio: boolean;
   includeVideo: boolean;
+  contactFilePath?: string;
+  contactFileName?: string;
 }
 
 export type ExportStatus =
@@ -66,7 +68,14 @@ export interface ExportRecord {
 export interface ChatManifestEntry {
   id: string;
   name: string;
+  displayName: string;
+  contactName: string;
+  verifiedName: string;
+  pushName: string;
+  shortName: string;
   phone: string;
+  waId: string;
+  rawId: string;
   isGroup: boolean;
   totalMessages: number;
   lastMessageAt: string | null;

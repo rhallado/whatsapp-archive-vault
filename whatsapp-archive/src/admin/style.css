@@ -50,6 +50,7 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
 .badge.s-finished{background:#0f2a1c;border-color:#1d5b3a;color:#a6f1c6}
 .badge.s-error{background:#2a1216;border-color:#5b1d23;color:#ffd5d8}
 .badge.s-cancelled{background:#2a2210;border-color:#5b4a1d;color:#ffe7b5}
+.badge.s-file_available{background:#10283a;border-color:#1d5970;color:#a8edf7}
 .qr{margin:14px 0;text-align:center}
 .qr img{width:280px;height:280px;background:#fff;padding:10px;border-radius:10px}
 .progress-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
@@ -61,6 +62,7 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
 #list .item:last-child{border-bottom:0}
 #list .item .title{font-weight:600}
 #list .item .meta{color:var(--muted);font-size:12px}
+#list .item a.primary{text-decoration:none;text-align:center;white-space:nowrap}
 
 /* login */
 .login-body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at top,#0e1a30,#070c17)}

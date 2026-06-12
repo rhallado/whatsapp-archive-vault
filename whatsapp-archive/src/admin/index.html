@@ -29,11 +29,15 @@
         apenas para importar histórico. Nenhuma mensagem será enviada. O arquivo gerado
         pode conter dados pessoais e deve ser armazenado com segurança (LGPD).
       </p>
+      <p class="muted">Modo conservador ativo: a exportação pode ser mais lenta para reduzir carga durante a leitura.</p>
       <form id="form-new" class="grid">
         <label>Nome da empresa<input name="companyName" required /></label>
         <label>Número WhatsApp<input name="phoneNumber" required placeholder="556599999999" /></label>
         <label>Nome do responsável<input name="responsibleName" required /></label>
         <label class="full">Observações<textarea name="notes" rows="2"></textarea></label>
+        <label class="full">Importar agenda de contatos (opcional)
+          <input type="file" name="contacts" accept=".csv,.vcf,text/csv,text/vcard" />
+        </label>
 
         <fieldset>
           <legend>Período</legend>
@@ -52,10 +56,10 @@
         <fieldset>
           <legend>Conteúdo</legend>
           <label class="row"><input type="checkbox" name="includeGroups" checked /> Importar grupos</label>
-          <label class="row"><input type="checkbox" name="includeMedia" checked /> Importar mídia</label>
-          <label class="row"><input type="checkbox" name="includeDocuments" checked /> Importar documentos</label>
-          <label class="row"><input type="checkbox" name="includeAudio" checked /> Importar áudios</label>
-          <label class="row"><input type="checkbox" name="includeVideo" checked /> Importar vídeos</label>
+          <label class="row"><input type="checkbox" name="includeMedia" /> Importar mídia</label>
+          <label class="row"><input type="checkbox" name="includeDocuments" /> Importar documentos</label>
+          <label class="row"><input type="checkbox" name="includeAudio" /> Importar áudios</label>
+          <label class="row"><input type="checkbox" name="includeVideo" /> Importar vídeos</label>
         </fieldset>
 
         <div class="full actions">
@@ -100,8 +104,8 @@
       <div class="actions">
         <a id="d-download" class="primary disabled" href="#">Baixar ZIP</a>
         <button id="d-cancel" class="warning">Cancelar</button>
-        <button id="d-disconnect" class="ghost">Desconectar WhatsApp</button>
-        <button id="d-cleanup" class="danger">Apagar dados temporários</button>
+        <button id="d-disconnect" class="ghost">Parar e desconectar sessão</button>
+        <button id="d-cleanup" class="danger">Apagar sessão e ZIP desta exportação</button>
       </div>
 
       <h3>Logs</h3>

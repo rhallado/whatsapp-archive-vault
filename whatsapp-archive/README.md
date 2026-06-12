@@ -16,7 +16,7 @@ Tudo em um único container Docker:
   - Worker WhatsApp usando `whatsapp-web.js` + Puppeteer/Chromium
 - Sem Supabase, sem Cloudflare Workers, sem dependência do Lovable.
 - Autenticação obrigatória por `ADMIN_TOKEN` (cookie httpOnly).
-- Volumes persistentes para sessões temporárias e ZIPs gerados.
+- Volumes persistentes para sessões temporárias e ZIPs gerados. A listagem e o download são reconstruídos a partir dos arquivos físicos após reinícios.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -87,17 +87,36 @@ Acesse: `http://<seu-host>:3001` → faça login com o `ADMIN_TOKEN`.
 
 ## Variáveis de ambiente
 
-| Variável        | Obrigatório | Default                  | Descrição                                                        |
-|-----------------|-------------|--------------------------|------------------------------------------------------------------|
-| `ADMIN_TOKEN`   | ✅          | —                        | Token de login (mínimo 12 chars). Gere com `openssl rand -hex 32`. |
-| `PUBLIC_URL`    | recomendado | `http://localhost:3001`  | URL pública da aplicação (exibida na UI).                        |
-| `HOST_PORT`     | não         | `3001`                   | Porta exposta no host (mapeada para 3000 do container).          |
-| `PORT`          | não         | `3000`                   | Porta interna do container.                                      |
-| `SESSION_DIR`   | não         | `/data/sessions`         | Pasta persistente das sessões WhatsApp Web.                      |
-| `EXPORT_DIR`    | não         | `/data/exports`          | Pasta dos ZIPs gerados.                                          |
-| `TMP_DIR`       | não         | `/data/tmp`              | Pasta temporária da exportação em andamento.                     |
+| Variável | Obrigatório | Default | Descrição |
+|---|---:|---|---|
+| `ADMIN_TOKEN` | sim | — | Token de login (mínimo 12 caracteres). |
+| `PUBLIC_URL` | recomendado | `http://localhost:3001` | URL pública da aplicação. |
+| `HOST_PORT` | não | `3001` | Porta exposta no host. |
+| `MAX_MESSAGES_PER_CHAT` | não | `20000` | Máximo de mensagens solicitadas por conversa. |
+| `MAX_CONCURRENT_EXPORTS` | não | `1` | Exportações simultâneas. |
+| `SAFE_MODE` | não | `true` | Ativa pausas técnicas entre operações. |
+| `CHAT_DELAY_MS` | não | `2500` | Pausa entre conversas. |
+| `MEDIA_DELAY_MS` | não | `800` | Pausa entre downloads de mídia. |
+| `MAX_CHATS_PER_RUN` | não | `0` | Máximo de conversas; `0` significa sem limite. |
+| `MAX_MEDIA_PER_RUN` | não | `0` | Máximo de mídias; `0` significa sem limite. |
+| `SESSION_DIR` | não | `/data/sessions` | Sessões locais do WhatsApp Web. |
+| `EXPORT_DIR` | não | `/data/exports` | ZIPs persistentes gerados. |
+| `TMP_DIR` | não | `/data/tmp` | Arquivos temporários e agendas durante a execução. |
 
 Volumes nomeados (`wa_sessions`, `wa_exports`, `wa_tmp`) são criados automaticamente pelo compose.
+
+`SAFE_MODE` adiciona pausas entre operações para reduzir carga e tornar a exportação menos agressiva. Isso não garante aceitação pela plataforma.
+
+### Onde ficam os ZIPs
+
+Dentro do Docker, os arquivos ficam em `/data/exports`, que pertence ao container/volume nomeado e não aparece automaticamente em `/data/exports` no host.
+
+```bash
+docker exec -it telenova-wa-archive sh -lc 'ls -lh /data/exports'
+docker cp telenova-wa-archive:/data/exports/NOME_DO_ARQUIVO.zip ./NOME_DO_ARQUIVO.zip
+```
+
+A tela **Exportações recentes** varre essa pasta; portanto, ZIPs preservados continuam listados e disponíveis para download após refresh, restart ou redeploy com o mesmo volume.
 
 ---
 
@@ -110,13 +129,13 @@ Todos exigem o cookie `tn_admin` (definido pelo `POST /api/auth/login`) ou heade
 | POST   | `/api/auth/login`                | Login (`{ token }`)                             |
 | POST   | `/api/auth/logout`               | Logout                                          |
 | GET    | `/api/auth/me`                   | Status de autenticação                          |
-| GET    | `/api/export`                    | Lista exportações em memória                    |
-| POST   | `/api/export/start`              | Cria nova exportação (corpo = opções)           |
+| GET    | `/api/export`                    | Lista jobs em memória e ZIPs físicos persistidos |
+| POST   | `/api/export/start`              | Cria exportação; aceita multipart com `options` e agenda `contacts` |
 | GET    | `/api/export/:id/qr`             | QR Code atual (data URL)                        |
 | GET    | `/api/export/:id/status`         | Status + progresso + logs                       |
 | POST   | `/api/export/:id/cancel`         | Cancela importação em andamento                 |
 | GET    | `/api/export/:id/download`       | Baixa o ZIP final                               |
-| POST   | `/api/export/:id/disconnect`     | Desconecta a sessão WhatsApp                    |
+| POST   | `/api/export/:id/disconnect`     | Para o job, desconecta e remove somente a sessão |
 | DELETE | `/api/export/:id/cleanup`        | Apaga sessão, ZIP e arquivos temporários        |
 
 ---
@@ -150,8 +169,8 @@ O visualizador **não usa `fetch()`** — todos os dados ficam em `.js` que popu
 - A UI exibe aviso LGPD antes de iniciar cada exportação.
 - Após cada exportação a operadora pode:
   - **Baixar o ZIP** (entregar ao cliente)
-  - **Desconectar** a sessão WhatsApp Web
-  - **Apagar dados temporários** (sessão + ZIP + pasta de trabalho)
+  - **Parar e desconectar a sessão** sem apagar ZIPs
+  - **Apagar sessão e ZIP desta exportação** somente após confirmação explícita
 - O ZIP final fica sob responsabilidade do cliente final — a Telenova
   não armazena cópia após a entrega.
 - Recomendado: rodar atrás de HTTPS (Caddy/Nginx/Traefik) com domínio próprio.
@@ -161,10 +180,14 @@ O visualizador **não usa `fetch()`** — todos os dados ficam em `.js` que popu
 ## Limitações conhecidas (whatsapp-web.js)
 
 - Apenas mensagens **sincronizadas com o WhatsApp Web** são acessíveis (o histórico que aparece em web.whatsapp.com).
+- Nomes podem depender dos dados disponibilizados pelo WhatsApp Web. Opcionalmente, envie uma agenda `.csv` (`name`/`nome`/`fullName` + `phone`/`telefone`/`number`/`numero`) ou `.vcf` (`FN` + `TEL`) antes da exportação; ela é usada apenas temporariamente e não entra no ZIP.
 - Mensagens **apagadas** antes da exportação não retornam conteúdo.
 - Mensagens **temporárias** e mídias **expiradas** podem não aparecer.
-- O WhatsApp pode invalidar a sessão se detectar uso atípico. Use a ferramenta
-  com moderação e sempre com autorização do dono do número.
+- Use a ferramenta somente com autorização do titular e conforme as políticas aplicáveis.
+
+## Correção de nomes em ZIP existente
+
+A correção pós-exportação por upload de ZIP e agenda está planejada. Atualmente, a agenda CSV/VCF deve ser fornecida no formulário antes de iniciar a exportação.
 
 ---
 

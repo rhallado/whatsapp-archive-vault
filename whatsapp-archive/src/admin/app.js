@@ -37,7 +37,11 @@
       includeAudio: fd.get('includeAudio') === 'on',
       includeVideo: fd.get('includeVideo') === 'on',
     };
-    const res = await fetch('/api/export/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const payload = new FormData();
+    payload.append('options', JSON.stringify(body));
+    const contacts = fd.get('contacts');
+    if (contacts && contacts.size) payload.append('contacts', contacts);
+    const res = await fetch('/api/export/start', { method: 'POST', body: payload });
     const j = await res.json();
     if (!res.ok) return alert(j.error || 'Erro');
     openDetail(j.id);
@@ -51,6 +55,17 @@
     for (const e of j.exports) {
       const d = document.createElement('div');
       d.className = 'item';
+      if (e.status === 'file_available') {
+        d.innerHTML = `
+          <div>
+            <div class="title">${escapeHtml(e.zipFileName)}</div>
+            <div class="meta">${formatBytes(e.size)} · ${new Date(e.createdAt).toLocaleString('pt-BR')}</div>
+          </div>
+          <span class="badge s-file_available">arquivo disponível</span>
+          <a class="primary" href="/api/export/${encodeURIComponent(e.id)}/download" download="${escapeHtml(e.zipFileName)}">Baixar ZIP</a>`;
+        wrap.appendChild(d);
+        continue;
+      }
       d.innerHTML = `
         <div>
           <div class="title">${escapeHtml(e.options.companyName)} — ${escapeHtml(e.options.phoneNumber)}</div>
@@ -102,12 +117,28 @@
   $('d-cancel').onclick = () => fetch(`/api/export/${currentId}/cancel`, { method: 'POST' });
   $('d-disconnect').onclick = async () => { await fetch(`/api/export/${currentId}/disconnect`, { method: 'POST' }); refresh(); };
   $('d-cleanup').onclick = async () => {
-    if (!confirm('Apagar dados temporários e ZIP desta exportação?')) return;
+    if (!confirm('Isso apagará arquivos temporários, sessão local e o ZIP desta exportação. Confirme apenas se você já baixou e validou o arquivo.')) return;
     await fetch(`/api/export/${currentId}/cleanup`, { method: 'DELETE' });
     show('list');
   };
 
   function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function formatBytes(value) {
+    const bytes = Number(value) || 0;
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KB', 'MB', 'GB'];
+    let amount = bytes / 1024, unit = 0;
+    while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit += 1; }
+    return `${amount.toFixed(amount >= 10 ? 1 : 2)} ${units[unit]}`;
+  }
+
+  const media = $('form-new').elements.includeMedia;
+  const mediaKinds = ['includeDocuments', 'includeAudio', 'includeVideo'].map((name) => $('form-new').elements[name]);
+  function syncMediaOptions() {
+    mediaKinds.forEach((input) => { input.disabled = !media.checked; if (!media.checked) input.checked = false; });
+  }
+  media.addEventListener('change', syncMediaOptions);
+  syncMediaOptions();
 
   show('new');
 })();

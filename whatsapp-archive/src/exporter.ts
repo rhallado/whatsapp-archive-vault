@@ -5,6 +5,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { findContactName, loadContactDirectory, normalizePhone, type ContactDirectory } from "./contacts";
 import type {
   ChatManifestEntry,
   ExportLogEntry,
@@ -18,6 +19,11 @@ import type {
 const VIEWER_DIR = path.join(__dirname, "viewer");
 const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.0.0";
 const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
+const SAFE_MODE = (process.env.SAFE_MODE || "true").toLowerCase() === "true";
+const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
+const MEDIA_DELAY_MS = parseInt(process.env.MEDIA_DELAY_MS || "800", 10);
+const MAX_CHATS_PER_RUN = parseInt(process.env.MAX_CHATS_PER_RUN || "0", 10);
+const MAX_MEDIA_PER_RUN = parseInt(process.env.MAX_MEDIA_PER_RUN || "0", 10);
 
 const SYNC_NOTICE =
   "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
@@ -39,6 +45,14 @@ function slug(s: string) {
 
 function safeName(s: string) {
   return s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function cleanWaId(value: unknown): string {
+  return String(value ?? "").replace(/@(c\.us|g\.us|lid|s\.whatsapp\.net|broadcast)$/i, "");
 }
 
 function fmtDate(d: Date) {
@@ -136,24 +150,34 @@ export class ExportJob {
     this.log("warn", "cancelamento solicitado");
   }
 
+  async stopAndDisconnect() {
+    this.cancelled = true;
+    if (this.client) {
+      try { await this.client.logout(); } catch { /* a sessão pode já estar desconectada */ }
+      try { await this.client.destroy(); } catch { /* ignore */ }
+      this.client = null;
+    }
+    const sess = path.join(this.sessionDir, `session-${this.clientId}`);
+    await fsp.rm(sess, { recursive: true, force: true }).catch(() => {});
+    this.setStatus("disconnected");
+    this.log("info", "Sessão desconectada e credenciais locais removidas. ZIPs preservados.");
+  }
+
   async disconnect() {
     if (this.client) {
       try { await this.client.destroy(); } catch { /* ignore */ }
       this.client = null;
-      this.setStatus("disconnected");
     }
   }
 
   async cleanup() {
-    await this.disconnect();
+    await this.stopAndDisconnect();
     await fsp.rm(this.workDir, { recursive: true, force: true }).catch(() => {});
-    const sess = path.join(this.sessionDir, `session-${this.clientId}`);
-    await fsp.rm(sess, { recursive: true, force: true }).catch(() => {});
     if (this.record.zipPath) {
       await fsp.rm(this.record.zipPath, { force: true }).catch(() => {});
       this.record.zipPath = undefined;
     }
-    this.log("info", "dados temporários apagados");
+    this.log("info", "sessão, arquivos temporários e ZIP apagados");
   }
 
   async start() {
@@ -165,6 +189,7 @@ export class ExportJob {
 
     this.setStatus("connecting");
     this.log("warn", SYNC_NOTICE);
+    if (SAFE_MODE) this.log("info", "Modo conservador ativo");
     this.client = new Client({
       authStrategy: new LocalAuth({ clientId: this.clientId, dataPath: this.sessionDir }),
       puppeteer: {
@@ -215,6 +240,9 @@ export class ExportJob {
       await this.client.initialize();
     } catch (e) {
       this.fail(e as Error);
+      if (this.record.options.contactFilePath) {
+        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
+      }
     }
   }
 
@@ -245,11 +273,21 @@ export class ExportJob {
       const opts = this.record.options;
 
       this.setStatus("listing_chats");
-      const chats = (await this.client.getChats()).filter((c) =>
+      const allChats = (await this.client.getChats()).filter((c) =>
         opts.includeGroups ? true : !c.isGroup
       );
+      const chats = MAX_CHATS_PER_RUN > 0 ? allChats.slice(0, MAX_CHATS_PER_RUN) : allChats;
       this.record.progress.chatsFound = chats.length;
       this.log("info", `chats encontrados: ${chats.length}`);
+      if (MAX_CHATS_PER_RUN > 0 && allChats.length > chats.length) {
+        this.log("warn", `limite MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN} atingido`);
+      }
+
+      const contacts = await loadContactDirectory(opts.contactFilePath).catch((error) => {
+        this.log("warn", `agenda não pôde ser lida: ${(error as Error).message}`);
+        return new Map() as ContactDirectory;
+      });
+      if (contacts.size) this.log("info", `agenda carregada: ${contacts.size} telefone(s)`);
 
       const { fromMs, toMs } = rangeFromOptions(opts);
       const chatManifest: ChatManifestEntry[] = [];
@@ -259,6 +297,7 @@ export class ExportJob {
       let idx = 0;
       for (const chat of chats) {
         this.throwIfCancelled();
+        if (SAFE_MODE && idx > 0) await sleep(CHAT_DELAY_MS);
         idx += 1;
         const chatId = `chat_${String(idx).padStart(3, "0")}`;
         const chatMediaDir = path.join(this.workDir, "media", chatId);
@@ -286,8 +325,10 @@ export class ExportJob {
               quotedMessageId: m.hasQuotedMsg ? (m as unknown as { _data?: { quotedStanzaID?: string } })._data?.quotedStanzaID || null : null,
             };
 
-            if (m.hasMedia && this.shouldDownloadMedia(m.type)) {
+            const mediaLimitReached = MAX_MEDIA_PER_RUN > 0 && this.record.progress.mediaDownloaded >= MAX_MEDIA_PER_RUN;
+            if (m.hasMedia && this.shouldDownloadMedia(m.type) && !mediaLimitReached) {
               try {
+                if (SAFE_MODE) await sleep(MEDIA_DELAY_MS);
                 const media = await m.downloadMedia();
                 if (media && media.data) {
                   await fsp.mkdir(chatMediaDir, { recursive: true });
@@ -331,10 +372,11 @@ export class ExportJob {
 
           const last = normalized.at(-1);
           const mediaCount = normalized.filter((n) => !!n.mediaPath).length;
+          const chatDetails = await this.resolveChatDetails(chat, contacts);
           chatManifest.push({
             id: chatId,
-            name: chat.name || (chat as unknown as { formattedTitle?: string }).formattedTitle || chat.id._serialized,
-            phone: chat.id._serialized.replace(/@c\.us|@g\.us/, ""),
+            name: chatDetails.displayName,
+            ...chatDetails,
             isGroup: !!chat.isGroup,
             totalMessages: normalized.length,
             lastMessageAt: last ? last.timestamp : null,
@@ -346,12 +388,16 @@ export class ExportJob {
           this.record.progress.chatsImported += 1;
           this.record.progress.messagesImported += normalized.length;
           this.record.progress.elapsedMs = Date.now() - this.startMs;
-          this.log("info", `chat ${chatId} (${chat.name}) importado: ${normalized.length} mensagens`);
+          this.log("info", `chat ${chatId} (${chatDetails.displayName}) importado: ${normalized.length} mensagens`);
         } catch (e) {
           if ((e as Error & { __cancelled?: boolean }).__cancelled) throw e;
           this.record.progress.errors += 1;
           this.log("error", `erro no chat ${chatId}: ${(e as Error).message}`);
         }
+      }
+
+      if (MAX_MEDIA_PER_RUN > 0 && this.record.progress.mediaDownloaded >= MAX_MEDIA_PER_RUN) {
+        this.log("warn", `limite MAX_MEDIA_PER_RUN=${MAX_MEDIA_PER_RUN} atingido; demais mídias não foram baixadas`);
       }
 
       this.setStatus("building_index");
@@ -378,7 +424,6 @@ export class ExportJob {
       this.finalizeTimer();
       this.setStatus("finished");
       this.log("info", `exportação concluída em ${(this.record.progress.elapsedMs/1000).toFixed(1)}s`);
-
       // mantém o cliente WhatsApp vivo até o usuário clicar "desconectar".
     } catch (e) {
       if ((e as Error & { __cancelled?: boolean }).__cancelled) {
@@ -388,7 +433,35 @@ export class ExportJob {
         return;
       }
       this.fail(e as Error);
+    } finally {
+      if (this.record.options.contactFilePath) {
+        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
+        this.record.options.contactFilePath = undefined;
+      }
     }
+  }
+
+  private async resolveChatDetails(chat: Chat, contacts: ContactDirectory) {
+    const formattedTitle = (chat as unknown as { formattedTitle?: string }).formattedTitle || "";
+    const contact = await chat.getContact().catch(() => null);
+    const data = contact as unknown as {
+      name?: string; verifiedName?: string; pushname?: string; shortName?: string;
+      number?: string; id?: { user?: string; _serialized?: string };
+    } | null;
+    const rawId = chat.id?._serialized || data?.id?._serialized || "";
+    const waId = cleanWaId(data?.id?._serialized || rawId);
+    const phone = normalizePhone(data?.number || data?.id?.user || chat.id?.user || cleanWaId(rawId));
+    const contactName = data?.name?.trim() || "";
+    const verifiedName = data?.verifiedName?.trim() || "";
+    const pushName = data?.pushname?.trim() || "";
+    const shortName = data?.shortName?.trim() || "";
+    const agendaName = findContactName(contacts, phone);
+    const individualCandidates = [agendaName, contactName, verifiedName, pushName, shortName, chat.name, formattedTitle, data?.number, chat.id?.user, cleanWaId(rawId)];
+    const groupCandidates = [chat.name, formattedTitle, cleanWaId(rawId)];
+    const displayName = (chat.isGroup ? groupCandidates : individualCandidates)
+      .map((value) => String(value ?? "").trim())
+      .find((value) => value && !/@lid$/i.test(value)) || phone || waId || cleanWaId(rawId) || "Contato sem nome";
+    return { displayName, contactName, verifiedName, pushName, shortName, phone, waId, rawId };
   }
 
   private shouldDownloadMedia(type: string): boolean {
