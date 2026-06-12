@@ -24,6 +24,11 @@ const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
 const MEDIA_DELAY_MS = parseInt(process.env.MEDIA_DELAY_MS || "800", 10);
 const MAX_CHATS_PER_RUN = parseInt(process.env.MAX_CHATS_PER_RUN || "0", 10);
 const MAX_MEDIA_PER_RUN = parseInt(process.env.MAX_MEDIA_PER_RUN || "0", 10);
+const DEEP_HISTORY_MODE = (process.env.DEEP_HISTORY_MODE || "false").toLowerCase() === "true";
+const INITIAL_SYNC_WAIT_MS = parseInt(process.env.INITIAL_SYNC_WAIT_MS || "30000", 10);
+const CHAT_SYNC_TIMEOUT_MS = parseInt(process.env.CHAT_SYNC_TIMEOUT_MS || "20000", 10);
+const FETCH_RETRY_COUNT = parseInt(process.env.FETCH_RETRY_COUNT || "2", 10);
+const FETCH_RETRY_DELAY_MS = parseInt(process.env.FETCH_RETRY_DELAY_MS || "3000", 10);
 
 const SYNC_NOTICE =
   "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
@@ -49,6 +54,10 @@ function safeName(s: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function chatKey(chat: Chat): string {
+  return chat.id?._serialized || `${chat.name || "sem_nome"}:${chat.timestamp || ""}`;
 }
 
 function cleanWaId(value: unknown): string {
@@ -104,6 +113,9 @@ export class ExportJob {
   private sessionDir: string;
   private exportDir: string;
   private clientId: string;
+  private importStarted = false;
+  private importFinished = false;
+  private importPromise: Promise<void> | null = null;
 
   constructor(
     id: string,
@@ -231,9 +243,9 @@ export class ExportJob {
       this.log("warn", `WhatsApp desconectado: ${reason}`);
     });
 
-    this.client.on("ready", () => {
+    this.client.once("ready", () => {
       this.log("info", "cliente pronto");
-      this.runImport().catch((e) => this.fail(e));
+      this.startImportOnce();
     });
 
     try {
@@ -244,6 +256,23 @@ export class ExportJob {
         await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
       }
     }
+  }
+
+  private startImportOnce() {
+    if (this.importStarted) {
+      this.log("warn", "evento ready recebido novamente; importação já estava em execução, ignorando");
+      return;
+    }
+
+    if (["finished", "cancelled", "error", "disconnected"].includes(this.record.status)) {
+      this.log("warn", `evento ready ignorado porque status atual é ${this.record.status}`);
+      return;
+    }
+
+    this.importStarted = true;
+    this.importPromise = this.runImport()
+      .then(() => { this.importFinished = true; })
+      .catch((e) => this.fail(e as Error));
   }
 
   private fail(err: Error) {
