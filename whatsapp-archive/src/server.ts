@@ -244,7 +244,11 @@ app.use((req, res, next) => {
 });
 app.use(express.static(ADMIN_DIR, { extensions: ["html"] }));
 
+app.get("/api/version", (_req, res) => {
+  res.json({ version: "1.1.0" });
+});
+
 app.listen(PORT, () => {
-  console.log(`Telenova WA Archive online em :${PORT} (público: ${PUBLIC_URL})`);
+  console.log(`Telenova WA Archive v1.1.0 online em :${PORT} (público: ${PUBLIC_URL})`);
   console.log(`Concorrência máxima: ${MAX_CONCURRENT} exportação(ões) simultânea(s).`);
 });
