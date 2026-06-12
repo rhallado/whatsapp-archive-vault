@@ -24,6 +24,11 @@ const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
 const MEDIA_DELAY_MS = parseInt(process.env.MEDIA_DELAY_MS || "800", 10);
 const MAX_CHATS_PER_RUN = parseInt(process.env.MAX_CHATS_PER_RUN || "0", 10);
 const MAX_MEDIA_PER_RUN = parseInt(process.env.MAX_MEDIA_PER_RUN || "0", 10);
+const DEEP_HISTORY_MODE = (process.env.DEEP_HISTORY_MODE || "false").toLowerCase() === "true";
+const INITIAL_SYNC_WAIT_MS = parseInt(process.env.INITIAL_SYNC_WAIT_MS || "30000", 10);
+const CHAT_SYNC_TIMEOUT_MS = parseInt(process.env.CHAT_SYNC_TIMEOUT_MS || "20000", 10);
+const FETCH_RETRY_COUNT = parseInt(process.env.FETCH_RETRY_COUNT || "2", 10);
+const FETCH_RETRY_DELAY_MS = parseInt(process.env.FETCH_RETRY_DELAY_MS || "3000", 10);
 
 const SYNC_NOTICE =
   "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
@@ -49,6 +54,10 @@ function safeName(s: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function chatKey(chat: Chat): string {
+  return chat.id?._serialized || `${chat.name || "sem_nome"}:${chat.timestamp || ""}`;
 }
 
 function cleanWaId(value: unknown): string {
@@ -104,6 +113,9 @@ export class ExportJob {
   private sessionDir: string;
   private exportDir: string;
   private clientId: string;
+  private importStarted = false;
+  private importFinished = false;
+  private importPromise: Promise<void> | null = null;
 
   constructor(
     id: string,
@@ -231,9 +243,9 @@ export class ExportJob {
       this.log("warn", `WhatsApp desconectado: ${reason}`);
     });
 
-    this.client.on("ready", () => {
+    this.client.once("ready", () => {
       this.log("info", "cliente pronto");
-      this.runImport().catch((e) => this.fail(e));
+      this.startImportOnce();
     });
 
     try {
@@ -244,6 +256,23 @@ export class ExportJob {
         await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
       }
     }
+  }
+
+  private startImportOnce() {
+    if (this.importStarted) {
+      this.log("warn", "evento ready recebido novamente; importação já estava em execução, ignorando");
+      return;
+    }
+
+    if (["finished", "cancelled", "error", "disconnected"].includes(this.record.status)) {
+      this.log("warn", `evento ready ignorado porque status atual é ${this.record.status}`);
+      return;
+    }
+
+    this.importStarted = true;
+    this.importPromise = this.runImport()
+      .then(() => { this.importFinished = true; })
+      .catch((e) => this.fail(e as Error));
   }
 
   private fail(err: Error) {
@@ -272,14 +301,40 @@ export class ExportJob {
       if (!this.client) throw new Error("cliente WhatsApp não inicializado");
       const opts = this.record.options;
 
+      this.record.progress.chatsFound = 0;
+      this.record.progress.chatsImported = 0;
+      this.record.progress.messagesImported = 0;
+      this.record.progress.mediaDownloaded = 0;
+      this.record.progress.mediaFailed = 0;
+      this.record.progress.errors = 0;
+      this.record.progress.elapsedMs = 0;
+
+      this.log("info", `MAX_MESSAGES_PER_CHAT=${MAX_MESSAGES_PER_CHAT}`);
+      this.log("info", `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE}`);
+      this.log("info", `MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN}`);
+      this.log("info", `MAX_MEDIA_PER_RUN=${MAX_MEDIA_PER_RUN}`);
+      if (DEEP_HISTORY_MODE && INITIAL_SYNC_WAIT_MS > 0) {
+        this.log("info", `aguardando sincronização inicial por ${INITIAL_SYNC_WAIT_MS}ms`);
+        await sleep(INITIAL_SYNC_WAIT_MS);
+        this.throwIfCancelled();
+      }
+
       this.setStatus("listing_chats");
-      const allChats = (await this.client.getChats()).filter((c) =>
+      const rawChats = await this.client.getChats();
+      const filteredChats = rawChats.filter((c) =>
         opts.includeGroups ? true : !c.isGroup
       );
-      const chats = MAX_CHATS_PER_RUN > 0 ? allChats.slice(0, MAX_CHATS_PER_RUN) : allChats;
+      const seen = new Set<string>();
+      const uniqueChats = filteredChats.filter((chat) => {
+        const key = chatKey(chat);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const chats = MAX_CHATS_PER_RUN > 0 ? uniqueChats.slice(0, MAX_CHATS_PER_RUN) : uniqueChats;
       this.record.progress.chatsFound = chats.length;
-      this.log("info", `chats encontrados: ${chats.length}`);
-      if (MAX_CHATS_PER_RUN > 0 && allChats.length > chats.length) {
+      this.log("info", `chats encontrados: ${rawChats.length}; filtrados/deduplicados: ${chats.length}`);
+      if (MAX_CHATS_PER_RUN > 0 && uniqueChats.length > chats.length) {
         this.log("warn", `limite MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN} atingido`);
       }
 
@@ -292,6 +347,7 @@ export class ExportJob {
       const { fromMs, toMs } = rangeFromOptions(opts);
       const chatManifest: ChatManifestEntry[] = [];
       const searchIndex: SearchIndexEntry[] = [];
+      let importedMessagesTotal = 0;
 
       this.setStatus("importing_messages");
       let idx = 0;
@@ -385,8 +441,9 @@ export class ExportJob {
             mediaCount,
           });
 
-          this.record.progress.chatsImported += 1;
-          this.record.progress.messagesImported += normalized.length;
+          this.record.progress.chatsImported = chatManifest.length;
+          importedMessagesTotal += normalized.length;
+          this.record.progress.messagesImported = importedMessagesTotal;
           this.record.progress.elapsedMs = Date.now() - this.startMs;
           this.log("info", `chat ${chatId} (${chatDetails.displayName}) importado: ${normalized.length} mensagens`);
         } catch (e) {
@@ -415,6 +472,8 @@ export class ExportJob {
       this.setStatus("building_viewer");
       await this.copyViewer();
       await this.writeManifest(chatManifest.length);
+
+      this.log("info", `resumo final: chatsFound=${this.record.progress.chatsFound}, chatsImported=${chatManifest.length}, messagesImported=${importedMessagesTotal}`);
 
       this.setStatus("zipping");
       const zipPath = await this.zipResult();
@@ -477,11 +536,36 @@ export class ExportJob {
   private async fetchChatMessages(chat: Chat, fromMs: number | null, toMs: number | null): Promise<Message[]> {
     // whatsapp-web.js carrega apenas as mensagens já sincronizadas no WhatsApp Web.
     const limit = MAX_MESSAGES_PER_CHAT;
-    const msgs = await chat.fetchMessages({ limit });
+    const chatLabel = chat.name || chat.id?._serialized || "chat sem identificação";
+    const maybeSync = (chat as unknown as { syncHistory?: () => Promise<unknown> }).syncHistory;
+
+    if (DEEP_HISTORY_MODE && typeof maybeSync === "function") {
+      this.log("info", `sincronizando histórico do chat "${chatLabel}"`);
+      await Promise.race([
+        maybeSync.call(chat),
+        sleep(CHAT_SYNC_TIMEOUT_MS).then(() => "timeout"),
+      ]).catch((e) => {
+        this.log("warn", `syncHistory falhou no chat "${chatLabel}": ${(e as Error).message}`);
+      });
+    }
+
+    let msgs = await chat.fetchMessages({ limit });
+    for (let attempt = 1; attempt <= FETCH_RETRY_COUNT; attempt += 1) {
+      if (!DEEP_HISTORY_MODE || msgs.length >= limit) break;
+      await sleep(FETCH_RETRY_DELAY_MS);
+      const again = await chat.fetchMessages({ limit });
+      if (again.length <= msgs.length) break;
+      msgs = again;
+    }
+
+    this.log("info", `chat "${chatLabel}" fetchMessages retornou ${msgs.length} mensagens`);
+    if (msgs.length <= 3) {
+      this.log("warn", `chat "${chatLabel}" retornou apenas ${msgs.length} mensagem(ns); provável histórico não sincronizado no WhatsApp Web`);
+    }
     if (msgs.length >= limit) {
       this.log(
         "warn",
-        `chat "${chat.name}" atingiu o limite MAX_MESSAGES_PER_CHAT=${limit}. Mensagens mais antigas podem ter sido truncadas. ${SYNC_NOTICE}`
+        `chat "${chatLabel}" atingiu o limite MAX_MESSAGES_PER_CHAT=${limit}. Mensagens mais antigas podem ter sido truncadas. ${SYNC_NOTICE}`
       );
     }
     return msgs.filter((m) => {
@@ -533,7 +617,12 @@ export class ExportJob {
         video: o.includeVideo,
       },
       notice: SYNC_NOTICE,
-      limits: { maxMessagesPerChat: MAX_MESSAGES_PER_CHAT },
+      limits: {
+        maxMessagesPerChat: MAX_MESSAGES_PER_CHAT,
+        deepHistoryMode: DEEP_HISTORY_MODE,
+        initialSyncWaitMs: INITIAL_SYNC_WAIT_MS,
+        fetchRetryCount: FETCH_RETRY_COUNT,
+      },
     };
     await fsp.writeFile(
       path.join(this.workDir, "manifest.json"),
@@ -550,6 +639,8 @@ export class ExportJob {
       `==========================\n\n` +
       `${SYNC_NOTICE}\n\n` +
       `Limite por chat nesta exportação: ${MAX_MESSAGES_PER_CHAT} mensagens (MAX_MESSAGES_PER_CHAT).\n` +
+      `Mesmo com um limite alto, chats podem retornar poucas mensagens quando o histórico não está sincronizado.\n` +
+      `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE} tenta melhorar a sincronização, mas não garante 100% do histórico.\n` +
       `Empresa: ${o.companyName}\nTelefone: ${o.phoneNumber}\nResponsável: ${o.responsibleName}\n` +
       `Exportado em: ${nowIso()}\nExportID: ${this.record.id}\n`;
     await fsp.writeFile(path.join(this.workDir, "AVISO.txt"), notice, "utf8");
