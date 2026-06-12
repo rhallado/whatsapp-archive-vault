@@ -1,7 +1,6 @@
 services:
   telenova-wa-archive:
     build: ./whatsapp-archive
-    image: telenova/wa-archive:latest
     container_name: telenova-wa-archive
     restart: unless-stopped
     ports:
