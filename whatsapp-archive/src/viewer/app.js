@@ -24,7 +24,7 @@
       if (currentFilter === 'group' && !c.isGroup) return false;
       if (currentFilter === 'media' && !c.hasMedia) return false;
       if (term) {
-        const hay = `${c.name} ${c.phone}`.toLowerCase();
+        const hay = `${c.displayName || c.name} ${c.phone || c.waId || c.rawId}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
@@ -34,10 +34,10 @@
       if (currentChat === c.id) li.classList.add('active');
       li.innerHTML = `
         <div class="cname">
-          <span>${escapeHtml(c.name)}</span>
+          <span>${escapeHtml(c.displayName || c.name)}</span>
           ${c.isGroup ? '<span class="tag">grupo</span>' : ''}
         </div>
-        <div class="csub">${escapeHtml(c.phone)} · ${c.totalMessages} msgs ${c.lastMessageAt ? '· ' + new Date(c.lastMessageAt).toLocaleDateString('pt-BR') : ''}</div>`;
+        <div class="csub">${escapeHtml(c.phone || c.waId || c.rawId)} · ${c.totalMessages} msgs ${c.lastMessageAt ? '· ' + new Date(c.lastMessageAt).toLocaleDateString('pt-BR') : ''}</div>`;
       li.onclick = () => openChat(c.id);
       listEl.appendChild(li);
     }
@@ -60,7 +60,7 @@
       const div = document.createElement('div');
       div.className = 'res';
       div.innerHTML = `
-        <div><strong>${escapeHtml(chat?.name || h.chatId)}</strong> <span class="muted">· ${h.date} ${h.time}</span></div>
+        <div><strong>${escapeHtml(chat?.displayName || chat?.name || h.chatId)}</strong> <span class="muted">· ${h.date} ${h.time}</span></div>
         <div class="muted" style="font-size:12px">${escapeHtml(h.senderName)}</div>
         <div>${highlight(h.text, term)}</div>`;
       div.onclick = () => openChat(h.chatId, h.messageId);
@@ -80,8 +80,8 @@
     renderList();
     const chat = CHATS.find((c) => c.id === chatId);
     if (!chat) return;
-    document.getElementById('conv-name').textContent = chat.name;
-    document.getElementById('conv-sub').textContent = `${chat.phone} · ${chat.totalMessages} mensagens ${chat.isGroup ? '· grupo' : ''}`;
+    document.getElementById('conv-name').textContent = chat.displayName || chat.name;
+    document.getElementById('conv-sub').textContent = `${chat.phone || chat.waId || chat.rawId || ''} · ${chat.totalMessages} mensagens ${chat.isGroup ? '· grupo' : ''}`;
 
     const body = document.getElementById('conv-body');
     body.innerHTML = '<p class="muted" style="padding:14px">Carregando…</p>';
