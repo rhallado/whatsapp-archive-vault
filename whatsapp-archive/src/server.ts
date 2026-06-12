@@ -127,6 +127,7 @@ app.get("/api/export", requireAuth, (_req, res) => {
 });
 
 app.post("/api/export/start", requireAuth, upload.single("contacts"), (req, res) => {
+  let contactFilePath: string | undefined;
   try {
     const raw = typeof req.body?.options === "string" ? JSON.parse(req.body.options) : req.body;
     const o = raw as ExportOptions;
@@ -134,27 +135,29 @@ app.post("/api/export/start", requireAuth, upload.single("contacts"), (req, res)
       if (req.file?.path) fs.rmSync(req.file.path, { force: true });
       return res.status(400).json({ error: "campos obrigatórios faltando" });
     }
-    if (req.file) {
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      const finalPath = path.join(TMP_DIR, `contacts-${crypto.randomUUID()}${ext}`);
-      fs.renameSync(req.file.path, finalPath);
-      o.contactFilePath = finalPath;
-      o.contactFileName = path.basename(req.file.originalname);
-    }
     const active = manager.list().filter((r) =>
       ["created","connecting","qr_ready","authenticated","listing_chats","importing_messages","downloading_media","building_index","building_viewer","zipping"].includes(r.status)
     ).length;
     if (active >= MAX_CONCURRENT) {
+      if (req.file?.path) fs.rmSync(req.file.path, { force: true });
       return res.status(429).json({
         error: "concurrency_limit",
         message: `Já existe ${active} exportação ativa. Aguarde finalizar ou aumente MAX_CONCURRENT_EXPORTS.`,
       });
+    }
+    if (req.file) {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      contactFilePath = path.join(TMP_DIR, `contacts-${crypto.randomUUID()}${ext}`);
+      fs.renameSync(req.file.path, contactFilePath);
+      o.contactFilePath = contactFilePath;
+      o.contactFileName = path.basename(req.file.originalname);
     }
     // cria e dispara em background — não aguarda job.start()
     const job = manager.createAndStart(o);
     res.json({ id: job.record.id });
   } catch (e) {
     if (req.file?.path && fs.existsSync(req.file.path)) fs.rmSync(req.file.path, { force: true });
+    if (contactFilePath && fs.existsSync(contactFilePath)) fs.rmSync(contactFilePath, { force: true });
     res.status(500).json({ error: (e as Error).message });
   }
 });
