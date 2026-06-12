@@ -164,7 +164,10 @@ export class ExportJob {
   }
 
   async disconnect() {
-    await this.stopAndDisconnect();
+    if (this.client) {
+      try { await this.client.destroy(); } catch { /* ignore */ }
+      this.client = null;
+    }
   }
 
   async cleanup() {

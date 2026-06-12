@@ -169,8 +169,8 @@ O visualizador **não usa `fetch()`** — todos os dados ficam em `.js` que popu
 - A UI exibe aviso LGPD antes de iniciar cada exportação.
 - Após cada exportação a operadora pode:
   - **Baixar o ZIP** (entregar ao cliente)
-  - **Desconectar** a sessão WhatsApp Web
-  - **Apagar dados temporários** (sessão + ZIP + pasta de trabalho)
+  - **Parar e desconectar a sessão** sem apagar ZIPs
+  - **Apagar sessão e ZIP desta exportação** somente após confirmação explícita
 - O ZIP final fica sob responsabilidade do cliente final — a Telenova
   não armazena cópia após a entrega.
 - Recomendado: rodar atrás de HTTPS (Caddy/Nginx/Traefik) com domínio próprio.
