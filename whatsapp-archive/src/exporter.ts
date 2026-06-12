@@ -301,14 +301,40 @@ export class ExportJob {
       if (!this.client) throw new Error("cliente WhatsApp não inicializado");
       const opts = this.record.options;
 
+      this.record.progress.chatsFound = 0;
+      this.record.progress.chatsImported = 0;
+      this.record.progress.messagesImported = 0;
+      this.record.progress.mediaDownloaded = 0;
+      this.record.progress.mediaFailed = 0;
+      this.record.progress.errors = 0;
+      this.record.progress.elapsedMs = 0;
+
+      this.log("info", `MAX_MESSAGES_PER_CHAT=${MAX_MESSAGES_PER_CHAT}`);
+      this.log("info", `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE}`);
+      this.log("info", `MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN}`);
+      this.log("info", `MAX_MEDIA_PER_RUN=${MAX_MEDIA_PER_RUN}`);
+      if (DEEP_HISTORY_MODE && INITIAL_SYNC_WAIT_MS > 0) {
+        this.log("info", `aguardando sincronização inicial por ${INITIAL_SYNC_WAIT_MS}ms`);
+        await sleep(INITIAL_SYNC_WAIT_MS);
+        this.throwIfCancelled();
+      }
+
       this.setStatus("listing_chats");
-      const allChats = (await this.client.getChats()).filter((c) =>
+      const rawChats = await this.client.getChats();
+      const filteredChats = rawChats.filter((c) =>
         opts.includeGroups ? true : !c.isGroup
       );
-      const chats = MAX_CHATS_PER_RUN > 0 ? allChats.slice(0, MAX_CHATS_PER_RUN) : allChats;
+      const seen = new Set<string>();
+      const uniqueChats = filteredChats.filter((chat) => {
+        const key = chatKey(chat);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const chats = MAX_CHATS_PER_RUN > 0 ? uniqueChats.slice(0, MAX_CHATS_PER_RUN) : uniqueChats;
       this.record.progress.chatsFound = chats.length;
-      this.log("info", `chats encontrados: ${chats.length}`);
-      if (MAX_CHATS_PER_RUN > 0 && allChats.length > chats.length) {
+      this.log("info", `chats encontrados: ${rawChats.length}; filtrados/deduplicados: ${chats.length}`);
+      if (MAX_CHATS_PER_RUN > 0 && uniqueChats.length > chats.length) {
         this.log("warn", `limite MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN} atingido`);
       }
 
@@ -321,6 +347,7 @@ export class ExportJob {
       const { fromMs, toMs } = rangeFromOptions(opts);
       const chatManifest: ChatManifestEntry[] = [];
       const searchIndex: SearchIndexEntry[] = [];
+      let importedMessagesTotal = 0;
 
       this.setStatus("importing_messages");
       let idx = 0;
@@ -414,8 +441,9 @@ export class ExportJob {
             mediaCount,
           });
 
-          this.record.progress.chatsImported += 1;
-          this.record.progress.messagesImported += normalized.length;
+          this.record.progress.chatsImported = chatManifest.length;
+          importedMessagesTotal += normalized.length;
+          this.record.progress.messagesImported = importedMessagesTotal;
           this.record.progress.elapsedMs = Date.now() - this.startMs;
           this.log("info", `chat ${chatId} (${chatDetails.displayName}) importado: ${normalized.length} mensagens`);
         } catch (e) {
@@ -444,6 +472,8 @@ export class ExportJob {
       this.setStatus("building_viewer");
       await this.copyViewer();
       await this.writeManifest(chatManifest.length);
+
+      this.log("info", `resumo final: chatsFound=${this.record.progress.chatsFound}, chatsImported=${chatManifest.length}, messagesImported=${importedMessagesTotal}`);
 
       this.setStatus("zipping");
       const zipPath = await this.zipResult();
