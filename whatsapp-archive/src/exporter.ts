@@ -240,6 +240,9 @@ export class ExportJob {
       await this.client.initialize();
     } catch (e) {
       this.fail(e as Error);
+      if (this.record.options.contactFilePath) {
+        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
+      }
     }
   }
 
@@ -421,8 +424,6 @@ export class ExportJob {
       this.finalizeTimer();
       this.setStatus("finished");
       this.log("info", `exportação concluída em ${(this.record.progress.elapsedMs/1000).toFixed(1)}s`);
-      if (opts.contactFilePath) await fsp.rm(opts.contactFilePath, { force: true }).catch(() => {});
-
       // mantém o cliente WhatsApp vivo até o usuário clicar "desconectar".
     } catch (e) {
       if ((e as Error & { __cancelled?: boolean }).__cancelled) {
@@ -432,6 +433,11 @@ export class ExportJob {
         return;
       }
       this.fail(e as Error);
+    } finally {
+      if (this.record.options.contactFilePath) {
+        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
+        this.record.options.contactFilePath = undefined;
+      }
     }
   }
 

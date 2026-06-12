@@ -63,6 +63,15 @@ function companyFromZipName(fileName: string, id: string): string {
   return value.split("-").filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ") || "Arquivo exportado";
 }
 
+function publicOptions(options: ExportOptions) {
+  const { contactFilePath: _privatePath, ...safe } = options;
+  return safe;
+}
+
+function publicRecord(record: ReturnType<ExportManager["list"]>[number]) {
+  return { ...record, options: publicOptions(record.options) };
+}
+
 const manager = new ExportManager(
   { tmp: TMP_DIR, sessions: SESSION_DIR, exports: EXPORT_DIR },
   { maxConcurrent: MAX_CONCURRENT }
@@ -110,8 +119,9 @@ app.get("/api/auth/me", (req, res) => res.json({ authed: authed(req), publicUrl:
 
 // ---- Export endpoints ----
 app.get("/api/export", requireAuth, (_req, res) => {
-  const jobs = manager.list();
-  const represented = new Set(jobs.flatMap((record) => [record.id, record.zipFileName || ""]));
+  const rawJobs = manager.list();
+  const jobs = rawJobs.map(publicRecord);
+  const represented = new Set(rawJobs.flatMap((record) => [record.id, record.zipFileName || ""]));
   const files = listZipFiles()
     .filter((zip) => !represented.has(zip.id) && !represented.has(zip.zipFileName))
     .map((zip) => ({
@@ -175,7 +185,7 @@ app.get("/api/export/:id/status", requireAuth, (req, res) => {
   res.json({
     id: r.id, status: r.status, progress: r.progress, error: r.errorMessage,
     zipFileName: r.zipFileName, qr: r.qrDataUrl || null,
-    options: r.options, createdAt: r.createdAt,
+    options: publicOptions(r.options), createdAt: r.createdAt,
     logs: r.logs.slice(-200),
   });
 });
