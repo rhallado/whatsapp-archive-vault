@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 const VIEWER_DIR = path.join(__dirname, "viewer");
-const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.3";
+const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.4";
 const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
 const SAFE_MODE = (process.env.SAFE_MODE || "true").toLowerCase() === "true";
 const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
