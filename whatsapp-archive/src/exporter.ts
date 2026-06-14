@@ -58,6 +58,20 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout em ${label} após ${ms}ms`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function chatKey(chat: Chat): string {
   return chat.id?._serialized || `${chat.name || "sem_nome"}:${chat.timestamp || ""}`;
 }
@@ -204,6 +218,8 @@ export class ExportJob {
     this.setStatus("connecting");
     this.log("warn", SYNC_NOTICE);
     if (SAFE_MODE) this.log("info", "Modo conservador ativo");
+    this.log("info", `PUPPETEER_PROTOCOL_TIMEOUT_MS=${PUPPETEER_PROTOCOL_TIMEOUT_MS}`);
+    this.log("info", `GET_CHATS_TIMEOUT_MS=${GET_CHATS_TIMEOUT_MS}`);
     this.client = new Client({
       authStrategy: new LocalAuth({ clientId: this.clientId, dataPath: this.sessionDir }),
       puppeteer: {
@@ -216,7 +232,6 @@ export class ExportJob {
           "--disable-gpu",
           "--no-first-run",
           "--no-zygote",
-          "--single-process",
         ],
       },
     });
@@ -260,18 +275,40 @@ export class ExportJob {
     }
   }
 
-  private startImportOnce() {
-    if (this.importStarted) {
-      this.log("warn", "evento ready recebido novamente; importação já estava em execução, ignorando");
+  public async retryImport() {
+    if (this.record.status !== "error") {
+      throw new Error(`retry permitido apenas em status error; status atual: ${this.record.status}`);
+    }
+
+    this.cancelled = false;
+    this.record.errorMessage = undefined;
+    this.importStarted = false;
+    this.importFinished = false;
+    this.importPromise = null;
+
+    if (!this.client) {
+      this.log("warn", "client não existe mais; reinicializando com a mesma sessão LocalAuth");
+      await this.start();
       return;
     }
 
-    if (["finished", "cancelled", "error", "disconnected"].includes(this.record.status)) {
+    this.log("info", "tentando novamente usando a sessão WhatsApp atual");
+    this.startImportOnce({ force: true });
+  }
+
+  private startImportOnce(options?: { force?: boolean }) {
+    if (this.importStarted && !options?.force) {
+      this.log("warn", "importação já estava em execução, ignorando");
+      return;
+    }
+
+    if (!options?.force && ["finished", "cancelled", "error", "disconnected"].includes(this.record.status)) {
       this.log("warn", `evento ready ignorado porque status atual é ${this.record.status}`);
       return;
     }
 
     this.importStarted = true;
+    this.importFinished = false;
     this.importPromise = this.runImport()
       .then(() => { this.importFinished = true; })
       .catch((e) => this.fail(e as Error));
