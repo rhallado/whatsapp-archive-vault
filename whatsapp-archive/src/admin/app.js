@@ -141,7 +141,7 @@
     if (s.zipFileName) { dl.classList.remove('disabled'); dl.href = s.downloadUrl || `/api/export/${currentId}/download`; dl.setAttribute('download', s.zipFileName); }
 
     const activeStatuses = ['created', 'connecting', 'qr_ready', 'authenticated', 'listing_chats', 'importing_messages', 'downloading_media', 'building_index', 'building_viewer', 'zipping'];
-    $('d-retry').classList.toggle('hidden', s.status !== 'error');
+    $('d-retry').classList.toggle('hidden', s.canRetry !== true);
     $('d-cancel').classList.toggle('hidden', !activeStatuses.includes(s.status));
     $('d-disconnect').classList.toggle('hidden', isFile || s.status === 'disconnected');
     $('d-cleanup').classList.toggle('hidden', isFile);
@@ -150,7 +150,7 @@
     $('d-logs-section').classList.toggle('hidden', logs.length === 0);
     $('d-logs').textContent = logs.map(l => `[${l.ts.slice(11,19)}] ${l.level.toUpperCase()} ${l.message}`).join('\n');
 
-    if (['finished', 'error', 'cancelled', 'disconnected'].includes(s.status)) stopPoll();
+    if (['finished', 'error', 'cancelled', 'disconnected'].includes(s.status) && s.canRetry !== true) stopPoll();
   }
 
   $('d-cancel').onclick = () => fetch(`/api/export/${currentId}/cancel`, { method: 'POST' });

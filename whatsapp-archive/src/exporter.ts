@@ -167,16 +167,17 @@ export class ExportJob {
     this.exportDir = dirs.exports;
   }
 
-  private setStatus(s: ExportStatus, options?: { allowTerminalExit?: boolean }) {
+  private setStatus(s: ExportStatus, options?: { allowTerminalExit?: boolean }): boolean {
     const allowTerminalExit = options?.allowTerminalExit || this.allowNextTerminalExit;
     if (TERMINAL_STATUSES.has(this.record.status) && s !== "error" && !allowTerminalExit) {
       this.log("warn", `status ${s} ignorado porque status atual é terminal: ${this.record.status}`);
-      return;
+      return false;
     }
 
     if (allowTerminalExit) this.allowNextTerminalExit = false;
     this.record.status = s;
     this.log("info", `status: ${s}`);
+    return true;
   }
 
   log(level: ExportLogEntry["level"], message: string) {
@@ -262,9 +263,11 @@ export class ExportJob {
 
     this.client.on("qr", async (qr) => {
       try {
-        this.record.qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
-        this.setStatus("qr_ready");
-        this.log("info", "QR Code gerado, aguardando leitura");
+        const qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
+        if (this.setStatus("qr_ready")) {
+          this.record.qrDataUrl = qrDataUrl;
+          this.log("info", "QR Code gerado, aguardando leitura");
+        }
       } catch (e) {
         this.log("error", `falha ao gerar QR: ${(e as Error).message}`);
       }
@@ -782,7 +785,7 @@ export class ExportManager {
 
   activeCount(): number {
     const ACTIVE: ExportRecord["status"][] = [
-      "created","connecting","qr_ready","authenticated","listing_chats",
+      "created","connecting","qr_ready","authenticated","ready","listing_chats",
       "importing_messages","downloading_media","building_index","building_viewer","zipping",
     ];
     return this.list().filter((r) => ACTIVE.includes(r.status)).length;
