@@ -411,11 +411,16 @@ export class ExportJob {
         const stack = (error as Error).stack || "";
         if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || stack.includes("ProtocolError") || message.includes("timeout em getChats")) {
           const friendly = "Timeout ao listar chats no WhatsApp Web. A sessão está autenticada, mas o WhatsApp Web demorou demais para retornar as conversas. Você pode tentar novamente sem ler novo QR Code.";
+          this.record.lastFailedStage = "listing_chats";
+          this.log("error", "lastFailedStage=listing_chats");
           this.log("error", friendly);
           throw new Error(friendly, { cause: error });
         }
+        this.record.lastFailedStage = "listing_chats";
+        this.log("error", "lastFailedStage=listing_chats");
         throw error;
       }
+      this.record.lastFailedStage = undefined;
       this.log("info", `getChats retornou ${rawChats.length} conversas`);
       const filteredChats = rawChats.filter((c) =>
         opts.includeGroups ? true : !c.isGroup
@@ -588,6 +593,7 @@ export class ExportJob {
         return;
       }
       this.fail(e as Error);
+      throw e;
     } finally {
       if (["finished", "cancelled", "disconnected"].includes(this.record.status)) await this.removeContactFile();
     }
