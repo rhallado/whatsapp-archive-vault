@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Telenova WhatsApp Archive Exporter</title>
-<link rel="stylesheet" href="/style.css?v=1.1.3" />
+<link rel="stylesheet" href="/style.css?v=1.1.4" />
 </head>
 <body>
 <header class="topbar">
@@ -92,7 +92,14 @@
         <img id="d-qr-img" alt="QR Code" />
       </div>
 
-      <div class="progress-grid">
+      <div id="d-file-info" class="file-info hidden">
+        <div><span class="muted">Nome do arquivo ZIP</span><strong id="d-file-name">—</strong></div>
+        <div><span class="muted">Tamanho</span><strong id="d-file-size">—</strong></div>
+        <div><span class="muted">Data do arquivo</span><strong id="d-file-date">—</strong></div>
+        <div><span class="muted">Caminho</span><strong id="d-file-path">—</strong></div>
+      </div>
+
+      <div id="d-progress" class="progress-grid">
         <div><span class="muted">Chats encontrados</span><strong id="p-found">0</strong></div>
         <div><span class="muted">Chats importados</span><strong id="p-imp">0</strong></div>
         <div><span class="muted">Mensagens</span><strong id="p-msg">0</strong></div>
@@ -109,8 +116,10 @@
         <button id="d-cleanup" class="danger">Apagar sessão e ZIP desta exportação</button>
       </div>
 
-      <h3>Logs</h3>
-      <pre id="d-logs" class="logs"></pre>
+      <div id="d-logs-section">
+        <h3>Logs</h3>
+        <pre id="d-logs" class="logs"></pre>
+      </div>
     </div>
   </section>
 </main>
@@ -118,6 +127,6 @@
 <footer id="footer" class="footer">
   Telenova WA Archive Exporter <span id="version">v?</span>
 </footer>
-<script src="/app.js?v=1.1.3"></script>
+<script src="/app.js?v=1.1.4"></script>
 </body>
 </html>

@@ -74,24 +74,24 @@
     for (const e of j.exports) {
       const d = document.createElement('div');
       d.className = 'item';
-      if (e.status === 'file_available') {
-        d.innerHTML = `
-          <div>
-            <div class="title">${escapeHtml(e.zipFileName)}</div>
-            <div class="meta">${formatBytes(e.size)} · ${new Date(e.createdAt).toLocaleString('pt-BR')}</div>
-          </div>
-          <span class="badge s-file_available">arquivo disponível</span>
-          <a class="primary" href="/api/export/${encodeURIComponent(e.id)}/download" download="${escapeHtml(e.zipFileName)}">Baixar ZIP</a>`;
-        wrap.appendChild(d);
-        continue;
-      }
+      const isFile = e.status === 'file_available';
+      const title = isFile ? e.zipFileName : `${e.options.companyName} — ${e.options.phoneNumber}`;
+      const meta = isFile
+        ? `${new Date(e.createdAt).toLocaleString('pt-BR')} · ${formatBytes(e.size)}`
+        : `${e.id} · ${new Date(e.createdAt).toLocaleString('pt-BR')} · ${e.progress.chatsImported} chats / ${e.progress.messagesImported} msgs`;
+      const download = e.zipFileName
+        ? `<a class="primary" href="/api/export/${encodeURIComponent(e.id)}/download" download="${escapeHtml(e.zipFileName)}">Baixar ZIP</a>`
+        : '';
       d.innerHTML = `
         <div>
-          <div class="title">${escapeHtml(e.options.companyName)} — ${escapeHtml(e.options.phoneNumber)}</div>
-          <div class="meta">${e.id} · ${new Date(e.createdAt).toLocaleString('pt-BR')} · ${e.progress.chatsImported} chats / ${e.progress.messagesImported} msgs</div>
+          <div class="title">${escapeHtml(title)}</div>
+          <div class="meta">${meta}</div>
         </div>
-        <span class="badge s-${e.status}">${e.status}</span>
-        <button class="ghost" data-open="${e.id}">Abrir</button>`;
+        <span class="badge s-${e.status}">${isFile ? 'arquivo disponível' : escapeHtml(e.status)}</span>
+        <div class="item-actions">
+          <button class="ghost" data-open="${escapeHtml(e.id)}">${isFile ? 'Detalhes' : 'Abrir'}</button>
+          ${download}
+        </div>`;
       wrap.appendChild(d);
     }
     wrap.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => openDetail(b.dataset.open));
@@ -109,28 +109,46 @@
     const r = await fetch(`/api/export/${currentId}/status`);
     if (!r.ok) return;
     const s = await r.json();
-    $('d-title').textContent = `${s.options.companyName} — ${s.options.phoneNumber}`;
-    const b = $('d-status'); b.textContent = s.status; b.className = `badge s-${s.status}`;
-    $('d-elapsed').textContent = `${(s.progress.elapsedMs / 1000).toFixed(1)}s`;
+    const isFile = s.status === 'file_available';
+    $('d-title').textContent = isFile ? s.zipFileName : `${s.options.companyName} — ${s.options.phoneNumber}`;
+    const b = $('d-status'); b.textContent = isFile ? 'ARQUIVO DISPONÍVEL' : s.status; b.className = `badge s-${s.status}`;
+    $('d-elapsed').textContent = isFile ? '' : `${(s.progress.elapsedMs / 1000).toFixed(1)}s`;
+
+    $('d-file-info').classList.toggle('hidden', !isFile);
+    $('d-progress').classList.toggle('hidden', isFile);
+    if (isFile) {
+      $('d-file-name').textContent = s.zipFileName;
+      $('d-file-size').textContent = formatBytes(s.size);
+      $('d-file-date').textContent = new Date(s.mtime || s.createdAt).toLocaleString('pt-BR');
+      $('d-file-path').textContent = s.logicalPath || `/data/exports/${s.zipFileName}`;
+    }
 
     const qrBox = $('d-qr');
     if (s.qr) { qrBox.classList.remove('hidden'); $('d-qr-img').src = s.qr; }
     else qrBox.classList.add('hidden');
 
-    $('p-found').textContent = s.progress.chatsFound;
-    $('p-imp').textContent = s.progress.chatsImported;
-    $('p-msg').textContent = s.progress.messagesImported;
-    $('p-media').textContent = s.progress.mediaDownloaded;
-    $('p-mediaf').textContent = s.progress.mediaFailed;
-    $('p-err').textContent = s.progress.errors;
+    if (!isFile) {
+      $('p-found').textContent = s.progress.chatsFound;
+      $('p-imp').textContent = s.progress.chatsImported;
+      $('p-msg').textContent = s.progress.messagesImported;
+      $('p-media').textContent = s.progress.mediaDownloaded;
+      $('p-mediaf').textContent = s.progress.mediaFailed;
+      $('p-err').textContent = s.progress.errors;
+    }
 
     const dl = $('d-download');
-    if (s.zipFileName) { dl.classList.remove('disabled'); dl.href = `/api/export/${currentId}/download`; dl.setAttribute('download', s.zipFileName); }
-    else dl.classList.add('disabled');
+    dl.classList.toggle('hidden', !s.zipFileName);
+    if (s.zipFileName) { dl.classList.remove('disabled'); dl.href = s.downloadUrl || `/api/export/${currentId}/download`; dl.setAttribute('download', s.zipFileName); }
 
+    const activeStatuses = ['created', 'connecting', 'qr_ready', 'authenticated', 'listing_chats', 'importing_messages', 'downloading_media', 'building_index', 'building_viewer', 'zipping'];
     $('d-retry').classList.toggle('hidden', s.status !== 'error');
+    $('d-cancel').classList.toggle('hidden', !activeStatuses.includes(s.status));
+    $('d-disconnect').classList.toggle('hidden', isFile || s.status === 'disconnected');
+    $('d-cleanup').classList.toggle('hidden', isFile);
 
-    $('d-logs').textContent = (s.logs || []).map(l => `[${l.ts.slice(11,19)}] ${l.level.toUpperCase()} ${l.message}`).join('\n');
+    const logs = s.logs || [];
+    $('d-logs-section').classList.toggle('hidden', logs.length === 0);
+    $('d-logs').textContent = logs.map(l => `[${l.ts.slice(11,19)}] ${l.level.toUpperCase()} ${l.message}`).join('\n');
 
     if (['finished', 'error', 'cancelled', 'disconnected'].includes(s.status)) stopPoll();
   }

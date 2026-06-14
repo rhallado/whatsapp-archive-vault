@@ -14,7 +14,7 @@ const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
-const CODE_VERSION = "1.1.3";
+const CODE_VERSION = "1.1.4";
 const APP_VERSION = CODE_VERSION;
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
@@ -58,6 +58,19 @@ function listZipFiles(): ZipFileInfo[] {
 function findZipByExportId(id: string): ZipFileInfo | null {
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) return null;
   return listZipFiles().find((zip) => zip.id === id || zip.zipFileName.includes(id)) || null;
+}
+
+function fileStatus(zip: ZipFileInfo) {
+  return {
+    id: zip.id,
+    status: "file_available" as const,
+    zipFileName: zip.zipFileName,
+    size: zip.size,
+    createdAt: zip.createdAt,
+    mtime: zip.mtime,
+    logicalPath: `/data/exports/${zip.zipFileName}`,
+    downloadUrl: `/api/export/${encodeURIComponent(zip.id)}/download`,
+  };
 }
 
 function companyFromZipName(fileName: string, id: string): string {
@@ -209,7 +222,11 @@ app.get("/api/export/:id/qr", requireAuth, (req, res) => {
 
 app.get("/api/export/:id/status", requireAuth, (req, res) => {
   const j = manager.get(req.params.id);
-  if (!j) return res.status(404).json({ error: "not_found" });
+  if (!j) {
+    const zip = findZipByExportId(req.params.id);
+    if (!zip) return res.status(404).json({ error: "not_found" });
+    return res.json(fileStatus(zip));
+  }
   const r = j.record;
   res.json({
     id: r.id, status: r.status, progress: r.progress, error: r.errorMessage,
@@ -217,6 +234,12 @@ app.get("/api/export/:id/status", requireAuth, (req, res) => {
     options: publicOptions(r.options), createdAt: r.createdAt,
     logs: r.logs.slice(-200),
   });
+});
+
+app.get("/api/export/:id/file-status", requireAuth, (req, res) => {
+  const zip = findZipByExportId(req.params.id);
+  if (!zip) return res.status(404).json({ error: "not_found" });
+  res.json(fileStatus(zip));
 });
 
 app.post("/api/export/:id/cancel", requireAuth, (req, res) => {

@@ -56,13 +56,17 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
 .progress-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
 .progress-grid div{background:#0c1424;border:1px solid var(--line);padding:10px;border-radius:10px;display:flex;flex-direction:column;gap:4px}
 .progress-grid strong{font-size:22px}
+.file-info{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.file-info div{background:#0c1424;border:1px solid var(--line);padding:12px;border-radius:10px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.file-info strong{font-size:14px;overflow-wrap:anywhere}
 .logs{background:#06101f;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:300px;overflow:auto;font-size:12px;white-space:pre-wrap}
 
-#list .item{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+#list .item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
 #list .item:last-child{border-bottom:0}
 #list .item .title{font-weight:600}
 #list .item .meta{color:var(--muted);font-size:12px}
 #list .item a.primary{text-decoration:none;text-align:center;white-space:nowrap}
+#list .item-actions{display:flex;gap:8px;align-items:center}
 
 /* login */
 .login-body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at top,#0e1a30,#070c17)}
@@ -79,4 +83,7 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
 @media (max-width:720px){
   .grid{grid-template-columns:1fr}
   .progress-grid{grid-template-columns:repeat(2,1fr)}
+  .file-info{grid-template-columns:1fr}
+  #list .item{grid-template-columns:1fr auto}
+  #list .item-actions{grid-column:1/-1;flex-wrap:wrap}
 }
