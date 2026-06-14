@@ -204,7 +204,7 @@ export class ExportJob {
     await this.removeContactFile();
     const sess = path.join(this.sessionDir, `session-${this.clientId}`);
     await fsp.rm(sess, { recursive: true, force: true }).catch(() => {});
-    this.setStatus("disconnected");
+    this.setStatus("disconnected", { allowTerminalExit: true });
     this.log("info", "Sessão desconectada e credenciais locais removidas. ZIPs preservados.");
   }
 
@@ -274,8 +274,7 @@ export class ExportJob {
     });
 
     this.client.on("authenticated", () => {
-      this.record.qrDataUrl = undefined;
-      this.setStatus("authenticated");
+      if (this.setStatus("authenticated")) this.record.qrDataUrl = undefined;
     });
 
     this.client.on("auth_failure", (msg) => {
