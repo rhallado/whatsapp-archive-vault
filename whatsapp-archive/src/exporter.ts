@@ -340,16 +340,25 @@ export class ExportJob {
     if (options?.force) this.allowNextTerminalExit = true;
     this.importStarted = true;
     this.importFinished = false;
-    this.importPromise = this.runImport()
+    const promise = this.runImport()
       .then(() => { this.importFinished = true; })
-      .catch((e) => this.fail(e as Error));
+      .catch((e) => this.fail(e))
+      .finally(() => {
+        if (this.importPromise === promise) this.importPromise = null;
+      });
+    this.importPromise = promise;
   }
 
-  private fail(err: Error) {
-    this.record.errorMessage = err.message;
+  private fail(err: unknown) {
+    this.importStarted = false;
+    this.importFinished = false;
+    this.importPromise = null;
+
+    const message = formatError(err);
+    this.record.errorMessage = message;
     this.record.progress.errors += 1;
     this.setStatus("error");
-    this.log("error", err.stack || err.message);
+    this.log("error", err instanceof Error ? err.stack || message : message);
     this.finalizeTimer();
   }
 
