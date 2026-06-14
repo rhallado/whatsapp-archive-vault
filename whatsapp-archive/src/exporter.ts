@@ -181,8 +181,9 @@ export class ExportJob {
   async stopAndDisconnect() {
     this.cancelled = true;
     if (this.client) {
-      try { await this.client.logout(); } catch { /* a sessão pode já estar desconectada */ }
-      try { await this.client.destroy(); } catch { /* ignore */ }
+      const client = this.client;
+      try { await client.logout(); } catch { /* a sessão pode já estar desconectada */ }
+      try { await client.destroy(); } catch { /* ignore */ }
       this.client = null;
     }
     await this.removeContactFile();
@@ -194,7 +195,8 @@ export class ExportJob {
 
   async disconnect() {
     if (this.client) {
-      try { await this.client.destroy(); } catch { /* ignore */ }
+      const client = this.client;
+      try { await client.destroy(); } catch { /* ignore */ }
       this.client = null;
     }
   }
