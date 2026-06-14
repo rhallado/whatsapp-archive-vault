@@ -347,13 +347,13 @@ export class ExportJob {
       this.record.progress.mediaFailed = 0;
       this.record.progress.errors = 0;
       this.record.progress.elapsedMs = 0;
+      this.record.progress.startedAt = nowIso();
+      this.record.progress.finishedAt = undefined;
 
       this.log("info", `MAX_MESSAGES_PER_CHAT=${MAX_MESSAGES_PER_CHAT}`);
       this.log("info", `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE}`);
       this.log("info", `MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN}`);
       this.log("info", `MAX_MEDIA_PER_RUN=${MAX_MEDIA_PER_RUN}`);
-      this.log("info", `PUPPETEER_PROTOCOL_TIMEOUT_MS=${PUPPETEER_PROTOCOL_TIMEOUT_MS}`);
-      this.log("info", `GET_CHATS_TIMEOUT_MS=${GET_CHATS_TIMEOUT_MS}`);
       if (DEEP_HISTORY_MODE && INITIAL_SYNC_WAIT_MS > 0) {
         this.log("info", `aguardando sincronização inicial por ${INITIAL_SYNC_WAIT_MS}ms`);
         await sleep(INITIAL_SYNC_WAIT_MS);
@@ -361,19 +361,15 @@ export class ExportJob {
       }
 
       this.setStatus("listing_chats");
-      this.log("info", `iniciando getChats() com timeout ${GET_CHATS_TIMEOUT_MS}ms e protocolTimeout ${PUPPETEER_PROTOCOL_TIMEOUT_MS}ms`);
+      this.log("info", `iniciando getChats() com timeout ${GET_CHATS_TIMEOUT_MS}ms`);
       let rawChats: Chat[];
       try {
-        rawChats = await Promise.race([
-          this.client.getChats(),
-          sleep(GET_CHATS_TIMEOUT_MS).then(() => {
-            throw new Error(`timeout em getChats após ${GET_CHATS_TIMEOUT_MS}ms`);
-          }),
-        ]);
+        rawChats = await withTimeout(this.client.getChats(), GET_CHATS_TIMEOUT_MS, "getChats()");
       } catch (error) {
         const message = (error as Error).message || String(error);
-        if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || message.includes("timeout em getChats")) {
-          const friendly = "Timeout ao listar chats no WhatsApp Web. A conta pode ter muitas conversas ou o servidor pode estar sobrecarregado. Aumente PUPPETEER_PROTOCOL_TIMEOUT_MS/GET_CHATS_TIMEOUT_MS ou tente novamente com menos carga.";
+        const stack = (error as Error).stack || "";
+        if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || stack.includes("ProtocolError") || message.includes("timeout em getChats")) {
+          const friendly = "Timeout ao listar chats no WhatsApp Web. A sessão está autenticada, mas o WhatsApp Web demorou demais para retornar as conversas. Você pode tentar novamente sem ler novo QR Code.";
           this.log("error", friendly);
           throw new Error(friendly, { cause: error });
         }
