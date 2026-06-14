@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 const VIEWER_DIR = path.join(__dirname, "viewer");
-const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.5";
+const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.6";
 const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
 const SAFE_MODE = (process.env.SAFE_MODE || "true").toLowerCase() === "true";
 const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
@@ -31,6 +31,7 @@ const FETCH_RETRY_COUNT = parseInt(process.env.FETCH_RETRY_COUNT || "2", 10);
 const FETCH_RETRY_DELAY_MS = parseInt(process.env.FETCH_RETRY_DELAY_MS || "3000", 10);
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = parseInt(process.env.PUPPETEER_PROTOCOL_TIMEOUT_MS || "900000", 10);
 const GET_CHATS_TIMEOUT_MS = parseInt(process.env.GET_CHATS_TIMEOUT_MS || "900000", 10);
+const TERMINAL_STATUSES = new Set<ExportStatus>(["finished", "error", "cancelled", "disconnected"]);
 
 const SYNC_NOTICE =
   "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
@@ -38,6 +39,11 @@ const SYNC_NOTICE =
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) return error.message || String(error);
+  return String(error);
 }
 
 function slug(s: string) {
@@ -160,7 +166,12 @@ export class ExportJob {
     this.exportDir = dirs.exports;
   }
 
-  private setStatus(s: ExportStatus) {
+  private setStatus(s: ExportStatus, options?: { allowTerminalExit?: boolean }) {
+    if (TERMINAL_STATUSES.has(this.record.status) && s !== "error" && !options?.allowTerminalExit) {
+      this.log("warn", `status ${s} ignorado porque status atual é terminal: ${this.record.status}`);
+      return;
+    }
+
     this.record.status = s;
     this.log("info", `status: ${s}`);
   }
