@@ -64,6 +64,8 @@ function fileStatus(zip: ZipFileInfo) {
   return {
     id: zip.id,
     status: "file_available" as const,
+    canRetry: false,
+    lastFailedStage: undefined,
     zipFileName: zip.zipFileName,
     size: zip.size,
     createdAt: zip.createdAt,
