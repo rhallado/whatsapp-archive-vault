@@ -14,7 +14,8 @@ const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
-const APP_VERSION = process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.1.3";
+const CODE_VERSION = "1.1.3";
+const APP_VERSION = CODE_VERSION;
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
   console.error("ADMIN_TOKEN ausente ou muito curto (mínimo 12 chars). Abortando.");
@@ -123,6 +124,7 @@ app.get("/api/version", requireAuth, (_req, res) => {
   res.json({
     version: APP_VERSION,
     exporterVersion: process.env.EXPORTER_VERSION || APP_VERSION,
+    configuredAppVersion: process.env.APP_VERSION || null,
     buildTime: process.env.BUILD_TIME || null,
     gitSha: process.env.GIT_SHA || null,
     nodeEnv: process.env.NODE_ENV || null,
@@ -134,6 +136,7 @@ app.get("/api/health", requireAuth, (_req, res) => {
     ok: true,
     app: "telenova-wa-archive",
     version: APP_VERSION,
+    configuredAppVersion: process.env.APP_VERSION || null,
     buildTime: process.env.BUILD_TIME || null,
     gitSha: process.env.GIT_SHA || null,
     uptime: process.uptime(),
