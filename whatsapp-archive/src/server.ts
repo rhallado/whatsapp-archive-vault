@@ -14,7 +14,7 @@ const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
-const APP_VERSION = process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.1.2";
+const APP_VERSION = process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.1.3";
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
   console.error("ADMIN_TOKEN ausente ou muito curto (mínimo 12 chars). Abortando.");
@@ -221,6 +221,18 @@ app.post("/api/export/:id/cancel", requireAuth, (req, res) => {
   if (!j) return res.status(404).json({ error: "not_found" });
   j.cancel();
   res.json({ ok: true });
+});
+
+app.post("/api/export/:id/retry", requireAuth, async (req, res) => {
+  const j = manager.get(req.params.id);
+  if (!j) return res.status(404).json({ error: "not_found" });
+
+  try {
+    await j.retryImport();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
 });
 
 app.get("/api/export/:id/download", requireAuth, (req, res) => {
