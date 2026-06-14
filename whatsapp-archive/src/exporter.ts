@@ -287,6 +287,7 @@ export class ExportJob {
 
     this.client.once("ready", () => {
       this.log("info", "cliente pronto");
+      this.setStatus("ready");
       this.startImportOnce();
     });
 
@@ -298,10 +299,16 @@ export class ExportJob {
   }
 
   public async retryImport() {
-    if (this.record.status !== "error") {
-      throw new Error(`retry permitido apenas em status error; status atual: ${this.record.status}`);
+    const allowed: ExportStatus[] = ["error", "authenticated", "ready", "listing_chats"];
+    if (!allowed.includes(this.record.status)) {
+      throw new Error(`retry não permitido em status ${this.record.status}`);
     }
 
+    if (this.importPromise) {
+      throw new Error("já existe uma tentativa de importação em andamento");
+    }
+
+    this.log("info", `retry solicitado; status atual=${this.record.status}; lastFailedStage=${this.record.lastFailedStage || "nenhum"}`);
     this.cancelled = false;
     this.record.errorMessage = undefined;
     this.importStarted = false;
@@ -310,6 +317,7 @@ export class ExportJob {
 
     if (!this.client) {
       this.log("warn", "client não existe mais; reinicializando com a mesma sessão LocalAuth");
+      this.allowNextTerminalExit = true;
       await this.start();
       return;
     }
@@ -329,6 +337,7 @@ export class ExportJob {
       return;
     }
 
+    if (options?.force) this.allowNextTerminalExit = true;
     this.importStarted = true;
     this.importFinished = false;
     this.importPromise = this.runImport()
