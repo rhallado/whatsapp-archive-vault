@@ -14,7 +14,7 @@ const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
-const CODE_VERSION = "1.1.5";
+const CODE_VERSION = "1.1.6";
 const APP_VERSION = CODE_VERSION;
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
@@ -64,6 +64,8 @@ function fileStatus(zip: ZipFileInfo) {
   return {
     id: zip.id,
     status: "file_available" as const,
+    canRetry: false,
+    lastFailedStage: undefined,
     zipFileName: zip.zipFileName,
     size: zip.size,
     createdAt: zip.createdAt,
@@ -85,6 +87,10 @@ function publicOptions(options: ExportOptions) {
 
 function publicRecord(record: ReturnType<ExportManager["list"]>[number]) {
   return { ...record, options: publicOptions(record.options) };
+}
+
+function canRetryStatus(status: string, lastFailedStage?: string): boolean {
+  return status === "error" || Boolean(lastFailedStage);
 }
 
 const manager = new ExportManager(
@@ -188,7 +194,7 @@ app.post("/api/export/start", requireAuth, upload.single("contacts"), (req, res)
       return res.status(400).json({ error: "campos obrigatórios faltando" });
     }
     const active = manager.list().filter((r) =>
-      ["created","connecting","qr_ready","authenticated","listing_chats","importing_messages","downloading_media","building_index","building_viewer","zipping"].includes(r.status)
+      ["created","connecting","qr_ready","authenticated","ready","listing_chats","importing_messages","downloading_media","building_index","building_viewer","zipping"].includes(r.status)
     ).length;
     if (active >= MAX_CONCURRENT) {
       if (req.file?.path) fs.rmSync(req.file.path, { force: true });
@@ -232,6 +238,8 @@ app.get("/api/export/:id/status", requireAuth, (req, res) => {
     id: r.id, status: r.status, progress: r.progress, error: r.errorMessage,
     zipFileName: r.zipFileName, qr: r.qrDataUrl || null,
     options: publicOptions(r.options), createdAt: r.createdAt,
+    lastFailedStage: r.lastFailedStage,
+    canRetry: canRetryStatus(r.status, r.lastFailedStage),
     logs: r.logs.slice(-200),
   });
 });

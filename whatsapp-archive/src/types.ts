@@ -23,6 +23,7 @@ export type ExportStatus =
   | "connecting"
   | "qr_ready"
   | "authenticated"
+  | "ready"
   | "listing_chats"
   | "importing_messages"
   | "downloading_media"
@@ -62,6 +63,7 @@ export interface ExportRecord {
   zipPath?: string;
   zipFileName?: string;
   errorMessage?: string;
+  lastFailedStage?: string;
   createdAt: string;
 }
 

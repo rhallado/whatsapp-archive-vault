@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 const VIEWER_DIR = path.join(__dirname, "viewer");
-const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.5";
+const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.6";
 const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
 const SAFE_MODE = (process.env.SAFE_MODE || "true").toLowerCase() === "true";
 const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
@@ -31,6 +31,7 @@ const FETCH_RETRY_COUNT = parseInt(process.env.FETCH_RETRY_COUNT || "2", 10);
 const FETCH_RETRY_DELAY_MS = parseInt(process.env.FETCH_RETRY_DELAY_MS || "3000", 10);
 const PUPPETEER_PROTOCOL_TIMEOUT_MS = parseInt(process.env.PUPPETEER_PROTOCOL_TIMEOUT_MS || "900000", 10);
 const GET_CHATS_TIMEOUT_MS = parseInt(process.env.GET_CHATS_TIMEOUT_MS || "900000", 10);
+const TERMINAL_STATUSES = new Set<ExportStatus>(["finished", "error", "cancelled", "disconnected"]);
 
 const SYNC_NOTICE =
   "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
@@ -38,6 +39,11 @@ const SYNC_NOTICE =
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) return error.message || String(error);
+  return String(error);
 }
 
 function slug(s: string) {
@@ -132,6 +138,7 @@ export class ExportJob {
   private importStarted = false;
   private importFinished = false;
   private importPromise: Promise<void> | null = null;
+  private allowNextTerminalExit = false;
 
   constructor(
     id: string,
@@ -160,9 +167,17 @@ export class ExportJob {
     this.exportDir = dirs.exports;
   }
 
-  private setStatus(s: ExportStatus) {
+  private setStatus(s: ExportStatus, options?: { allowTerminalExit?: boolean }): boolean {
+    const allowTerminalExit = options?.allowTerminalExit || this.allowNextTerminalExit;
+    if (TERMINAL_STATUSES.has(this.record.status) && s !== "error" && !allowTerminalExit) {
+      this.log("warn", `status ${s} ignorado porque status atual é terminal: ${this.record.status}`);
+      return false;
+    }
+
+    if (allowTerminalExit) this.allowNextTerminalExit = false;
     this.record.status = s;
     this.log("info", `status: ${s}`);
+    return true;
   }
 
   log(level: ExportLogEntry["level"], message: string) {
@@ -189,7 +204,7 @@ export class ExportJob {
     await this.removeContactFile();
     const sess = path.join(this.sessionDir, `session-${this.clientId}`);
     await fsp.rm(sess, { recursive: true, force: true }).catch(() => {});
-    this.setStatus("disconnected");
+    this.setStatus("disconnected", { allowTerminalExit: true });
     this.log("info", "Sessão desconectada e credenciais locais removidas. ZIPs preservados.");
   }
 
@@ -248,17 +263,18 @@ export class ExportJob {
 
     this.client.on("qr", async (qr) => {
       try {
-        this.record.qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
-        this.setStatus("qr_ready");
-        this.log("info", "QR Code gerado, aguardando leitura");
+        const qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
+        if (this.setStatus("qr_ready")) {
+          this.record.qrDataUrl = qrDataUrl;
+          this.log("info", "QR Code gerado, aguardando leitura");
+        }
       } catch (e) {
         this.log("error", `falha ao gerar QR: ${(e as Error).message}`);
       }
     });
 
     this.client.on("authenticated", () => {
-      this.record.qrDataUrl = undefined;
-      this.setStatus("authenticated");
+      if (this.setStatus("authenticated")) this.record.qrDataUrl = undefined;
     });
 
     this.client.on("auth_failure", (msg) => {
@@ -273,6 +289,7 @@ export class ExportJob {
 
     this.client.once("ready", () => {
       this.log("info", "cliente pronto");
+      this.setStatus("ready");
       this.startImportOnce();
     });
 
@@ -284,10 +301,16 @@ export class ExportJob {
   }
 
   public async retryImport() {
-    if (this.record.status !== "error") {
-      throw new Error(`retry permitido apenas em status error; status atual: ${this.record.status}`);
+    const allowed: ExportStatus[] = ["error", "authenticated", "ready", "listing_chats"];
+    if (!allowed.includes(this.record.status)) {
+      throw new Error(`retry não permitido em status ${this.record.status}`);
     }
 
+    if (this.importPromise) {
+      throw new Error("já existe uma tentativa de importação em andamento");
+    }
+
+    this.log("info", `retry solicitado; status atual=${this.record.status}; lastFailedStage=${this.record.lastFailedStage || "nenhum"}`);
     this.cancelled = false;
     this.record.errorMessage = undefined;
     this.importStarted = false;
@@ -296,6 +319,7 @@ export class ExportJob {
 
     if (!this.client) {
       this.log("warn", "client não existe mais; reinicializando com a mesma sessão LocalAuth");
+      this.allowNextTerminalExit = true;
       await this.start();
       return;
     }
@@ -315,18 +339,29 @@ export class ExportJob {
       return;
     }
 
+    if (options?.force) this.allowNextTerminalExit = true;
     this.importStarted = true;
     this.importFinished = false;
-    this.importPromise = this.runImport()
+    const promise = this.runImport()
       .then(() => { this.importFinished = true; })
-      .catch((e) => this.fail(e as Error));
+      .catch((e) => this.fail(e))
+      .finally(() => {
+        if (this.importPromise === promise) this.importPromise = null;
+      });
+    this.importPromise = promise;
   }
 
-  private fail(err: Error) {
-    this.record.errorMessage = err.message;
+  private fail(err: unknown) {
+    this.importStarted = false;
+    this.importFinished = false;
+    this.importPromise = null;
+
+    const message = formatError(err);
+    this.record.errorMessage = message;
     this.record.progress.errors += 1;
     this.setStatus("error");
-    this.log("error", err.stack || err.message);
+    if (this.record.lastFailedStage) this.log("error", `lastFailedStage=${this.record.lastFailedStage}`);
+    this.log("error", err instanceof Error ? err.stack || message : message);
     this.finalizeTimer();
   }
 
@@ -379,11 +414,14 @@ export class ExportJob {
         const stack = (error as Error).stack || "";
         if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || stack.includes("ProtocolError") || message.includes("timeout em getChats")) {
           const friendly = "Timeout ao listar chats no WhatsApp Web. A sessão está autenticada, mas o WhatsApp Web demorou demais para retornar as conversas. Você pode tentar novamente sem ler novo QR Code.";
+          this.record.lastFailedStage = "listing_chats";
           this.log("error", friendly);
           throw new Error(friendly, { cause: error });
         }
+        this.record.lastFailedStage = "listing_chats";
         throw error;
       }
+      this.record.lastFailedStage = undefined;
       this.log("info", `getChats retornou ${rawChats.length} conversas`);
       const filteredChats = rawChats.filter((c) =>
         opts.includeGroups ? true : !c.isGroup
@@ -555,7 +593,7 @@ export class ExportJob {
         await this.disconnect().catch(() => {});
         return;
       }
-      this.fail(e as Error);
+      throw e;
     } finally {
       if (["finished", "cancelled", "disconnected"].includes(this.record.status)) await this.removeContactFile();
     }
@@ -745,7 +783,7 @@ export class ExportManager {
 
   activeCount(): number {
     const ACTIVE: ExportRecord["status"][] = [
-      "created","connecting","qr_ready","authenticated","listing_chats",
+      "created","connecting","qr_ready","authenticated","ready","listing_chats",
       "importing_messages","downloading_media","building_index","building_viewer","zipping",
     ];
     return this.list().filter((r) => ACTIVE.includes(r.status)).length;
