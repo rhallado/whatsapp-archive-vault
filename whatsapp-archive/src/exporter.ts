@@ -277,9 +277,6 @@ export class ExportJob {
       await this.client.initialize();
     } catch (e) {
       this.fail(e as Error);
-      if (this.record.options.contactFilePath) {
-        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
-      }
     }
   }
 
@@ -557,10 +554,7 @@ export class ExportJob {
       }
       this.fail(e as Error);
     } finally {
-      if (this.record.options.contactFilePath) {
-        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
-        this.record.options.contactFilePath = undefined;
-      }
+      if (["finished", "cancelled", "disconnected"].includes(this.record.status)) await this.removeContactFile();
     }
   }
 
