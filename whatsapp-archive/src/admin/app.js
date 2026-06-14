@@ -128,12 +128,23 @@
     if (s.zipFileName) { dl.classList.remove('disabled'); dl.href = `/api/export/${currentId}/download`; dl.setAttribute('download', s.zipFileName); }
     else dl.classList.add('disabled');
 
+    $('d-retry').classList.toggle('hidden', s.status !== 'error');
+
     $('d-logs').textContent = (s.logs || []).map(l => `[${l.ts.slice(11,19)}] ${l.level.toUpperCase()} ${l.message}`).join('\n');
 
     if (['finished', 'error', 'cancelled', 'disconnected'].includes(s.status)) stopPoll();
   }
 
   $('d-cancel').onclick = () => fetch(`/api/export/${currentId}/cancel`, { method: 'POST' });
+  $('d-retry').onclick = async () => {
+    const res = await fetch(`/api/export/${currentId}/retry`, { method: 'POST' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      return alert(j.error || 'Erro ao tentar novamente');
+    }
+    refresh();
+    startPoll();
+  };
   $('d-disconnect').onclick = async () => { await fetch(`/api/export/${currentId}/disconnect`, { method: 'POST' }); refresh(); };
   $('d-cleanup').onclick = async () => {
     if (!confirm('Isso apagará arquivos temporários, sessão local e o ZIP desta exportação. Confirme apenas se você já baixou e validou o arquivo.')) return;
