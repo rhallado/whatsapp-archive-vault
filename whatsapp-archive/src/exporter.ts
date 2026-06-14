@@ -592,7 +592,6 @@ export class ExportJob {
         await this.disconnect().catch(() => {});
         return;
       }
-      this.fail(e as Error);
       throw e;
     } finally {
       if (["finished", "cancelled", "disconnected"].includes(this.record.status)) await this.removeContactFile();
