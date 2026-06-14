@@ -138,6 +138,7 @@ export class ExportJob {
   private importStarted = false;
   private importFinished = false;
   private importPromise: Promise<void> | null = null;
+  private allowNextTerminalExit = false;
 
   constructor(
     id: string,
@@ -167,11 +168,13 @@ export class ExportJob {
   }
 
   private setStatus(s: ExportStatus, options?: { allowTerminalExit?: boolean }) {
-    if (TERMINAL_STATUSES.has(this.record.status) && s !== "error" && !options?.allowTerminalExit) {
+    const allowTerminalExit = options?.allowTerminalExit || this.allowNextTerminalExit;
+    if (TERMINAL_STATUSES.has(this.record.status) && s !== "error" && !allowTerminalExit) {
       this.log("warn", `status ${s} ignorado porque status atual é terminal: ${this.record.status}`);
       return;
     }
 
+    if (allowTerminalExit) this.allowNextTerminalExit = false;
     this.record.status = s;
     this.log("info", `status: ${s}`);
   }
