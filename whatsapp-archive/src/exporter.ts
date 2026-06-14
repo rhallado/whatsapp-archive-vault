@@ -29,6 +29,8 @@ const INITIAL_SYNC_WAIT_MS = parseInt(process.env.INITIAL_SYNC_WAIT_MS || "30000
 const CHAT_SYNC_TIMEOUT_MS = parseInt(process.env.CHAT_SYNC_TIMEOUT_MS || "20000", 10);
 const FETCH_RETRY_COUNT = parseInt(process.env.FETCH_RETRY_COUNT || "2", 10);
 const FETCH_RETRY_DELAY_MS = parseInt(process.env.FETCH_RETRY_DELAY_MS || "3000", 10);
+const PUPPETEER_PROTOCOL_TIMEOUT_MS = parseInt(process.env.PUPPETEER_PROTOCOL_TIMEOUT_MS || "900000", 10);
+const GET_CHATS_TIMEOUT_MS = parseInt(process.env.GET_CHATS_TIMEOUT_MS || "900000", 10);
 
 const SYNC_NOTICE =
   "AVISO: esta ferramenta importa apenas o histórico já sincronizado/disponível no WhatsApp Web no momento da exportação. " +
@@ -206,11 +208,11 @@ export class ExportJob {
       authStrategy: new LocalAuth({ clientId: this.clientId, dataPath: this.sessionDir }),
       puppeteer: {
         headless: true,
+        protocolTimeout: PUPPETEER_PROTOCOL_TIMEOUT_MS,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
           "--disable-gpu",
           "--no-first-run",
           "--no-zygote",
@@ -313,6 +315,8 @@ export class ExportJob {
       this.log("info", `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE}`);
       this.log("info", `MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN}`);
       this.log("info", `MAX_MEDIA_PER_RUN=${MAX_MEDIA_PER_RUN}`);
+      this.log("info", `PUPPETEER_PROTOCOL_TIMEOUT_MS=${PUPPETEER_PROTOCOL_TIMEOUT_MS}`);
+      this.log("info", `GET_CHATS_TIMEOUT_MS=${GET_CHATS_TIMEOUT_MS}`);
       if (DEEP_HISTORY_MODE && INITIAL_SYNC_WAIT_MS > 0) {
         this.log("info", `aguardando sincronização inicial por ${INITIAL_SYNC_WAIT_MS}ms`);
         await sleep(INITIAL_SYNC_WAIT_MS);
@@ -320,7 +324,25 @@ export class ExportJob {
       }
 
       this.setStatus("listing_chats");
-      const rawChats = await this.client.getChats();
+      this.log("info", `iniciando getChats() com timeout ${GET_CHATS_TIMEOUT_MS}ms e protocolTimeout ${PUPPETEER_PROTOCOL_TIMEOUT_MS}ms`);
+      let rawChats: Chat[];
+      try {
+        rawChats = await Promise.race([
+          this.client.getChats(),
+          sleep(GET_CHATS_TIMEOUT_MS).then(() => {
+            throw new Error(`timeout em getChats após ${GET_CHATS_TIMEOUT_MS}ms`);
+          }),
+        ]);
+      } catch (error) {
+        const message = (error as Error).message || String(error);
+        if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || message.includes("timeout em getChats")) {
+          const friendly = "Timeout ao listar chats no WhatsApp Web. A conta pode ter muitas conversas ou o servidor pode estar sobrecarregado. Aumente PUPPETEER_PROTOCOL_TIMEOUT_MS/GET_CHATS_TIMEOUT_MS ou tente novamente com menos carga.";
+          this.log("error", friendly);
+          throw new Error(friendly, { cause: error });
+        }
+        throw error;
+      }
+      this.log("info", `getChats retornou ${rawChats.length} conversas`);
       const filteredChats = rawChats.filter((c) =>
         opts.includeGroups ? true : !c.isGroup
       );

@@ -94,9 +94,11 @@ O compose usa somente `build: ./whatsapp-archive` (ou `build: .` no compose inte
 | `ADMIN_TOKEN` | sim | — | Token de login (mínimo 12 caracteres). |
 | `PUBLIC_URL` | recomendado | `http://localhost:3001` | URL pública da aplicação. |
 | `HOST_PORT` | não | `3001` | Porta exposta no host. |
-| `APP_VERSION` | não | `1.1.1` | Versão da aplicação exibida na UI e nos diagnósticos. |
+| `APP_VERSION` | não | `1.1.2` | Versão da aplicação exibida na UI e nos diagnósticos. |
 | `BUILD_TIME` | não | vazio | Data/hora opcional do build. |
 | `GIT_SHA` | não | vazio | SHA opcional do commit implantado. |
+| `PUPPETEER_PROTOCOL_TIMEOUT_MS` | não | `900000` | Timeout CDP/Puppeteer (15 minutos) para operações longas. |
+| `GET_CHATS_TIMEOUT_MS` | não | `900000` | Timeout máximo (15 minutos) para listar conversas. |
 | `MAX_MESSAGES_PER_CHAT` | não | `20000` | Máximo de mensagens solicitadas por conversa. |
 | `MAX_CONCURRENT_EXPORTS` | não | `1` | Exportações simultâneas. |
 | `SAFE_MODE` | não | `true` | Ativa pausas técnicas entre operações. |

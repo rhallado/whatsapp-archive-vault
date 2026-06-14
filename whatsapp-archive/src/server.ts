@@ -14,6 +14,7 @@ const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
+const APP_VERSION = process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.1.2";
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {
   console.error("ADMIN_TOKEN ausente ou muito curto (mínimo 12 chars). Abortando.");
@@ -120,8 +121,8 @@ app.get("/api/auth/me", (req, res) => res.json({ authed: authed(req), publicUrl:
 // ---- Build / deploy diagnostics ----
 app.get("/api/version", requireAuth, (_req, res) => {
   res.json({
-    version: process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.0.0",
-    exporterVersion: process.env.EXPORTER_VERSION || "1.0.0",
+    version: APP_VERSION,
+    exporterVersion: process.env.EXPORTER_VERSION || APP_VERSION,
     buildTime: process.env.BUILD_TIME || null,
     gitSha: process.env.GIT_SHA || null,
     nodeEnv: process.env.NODE_ENV || null,
@@ -132,7 +133,7 @@ app.get("/api/health", requireAuth, (_req, res) => {
   res.json({
     ok: true,
     app: "telenova-wa-archive",
-    version: process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.0.0",
+    version: APP_VERSION,
     buildTime: process.env.BUILD_TIME || null,
     gitSha: process.env.GIT_SHA || null,
     uptime: process.uptime(),
@@ -270,7 +271,6 @@ app.use((req, res, next) => {
 app.use(express.static(ADMIN_DIR, { extensions: ["html"] }));
 
 app.listen(PORT, () => {
-  const appVersion = process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.0.0";
-  console.log(`Telenova WA Archive v${appVersion} online em :${PORT} (público: ${PUBLIC_URL})`);
+  console.log(`Telenova WA Archive v${APP_VERSION} online em :${PORT} (público: ${PUBLIC_URL})`);
   console.log(`Concorrência máxima: ${MAX_CONCURRENT} exportação(ões) simultânea(s).`);
 });
