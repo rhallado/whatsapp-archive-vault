@@ -1,9 +1,22 @@
 (() => {
   // version
-  fetch('/api/version').then(r => r.json()).then(j => {
-    const el = document.getElementById('version');
-    if (el && j.version) el.textContent = 'v' + j.version;
-  }).catch(() => {});
+  fetch('/api/version')
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      const el = document.getElementById('version');
+      if (!el) return;
+      if (!j) {
+        el.textContent = 'v?';
+        return;
+      }
+      const version = j.version || j.exporterVersion || '?';
+      const sha = j.gitSha ? String(j.gitSha).slice(0, 7) : '';
+      el.textContent = sha ? `v${version} · ${sha}` : `v${version}`;
+    })
+    .catch(() => {
+      const el = document.getElementById('version');
+      if (el) el.textContent = 'v?';
+    });
 
   const $ = (id) => document.getElementById(id);
   const views = { new: $('view-new'), list: $('view-list'), detail: $('view-detail') };

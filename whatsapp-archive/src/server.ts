@@ -117,6 +117,31 @@ app.post("/api/auth/logout", (_req, res) => {
 });
 app.get("/api/auth/me", (req, res) => res.json({ authed: authed(req), publicUrl: PUBLIC_URL }));
 
+// ---- Build / deploy diagnostics ----
+app.get("/api/version", requireAuth, (_req, res) => {
+  res.json({
+    version: process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.0.0",
+    exporterVersion: process.env.EXPORTER_VERSION || "1.0.0",
+    buildTime: process.env.BUILD_TIME || null,
+    gitSha: process.env.GIT_SHA || null,
+    nodeEnv: process.env.NODE_ENV || null,
+  });
+});
+
+app.get("/api/health", requireAuth, (_req, res) => {
+  res.json({
+    ok: true,
+    app: "telenova-wa-archive",
+    version: process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.0.0",
+    buildTime: process.env.BUILD_TIME || null,
+    gitSha: process.env.GIT_SHA || null,
+    uptime: process.uptime(),
+    exportDir: EXPORT_DIR,
+    sessionDir: SESSION_DIR,
+    tmpDir: TMP_DIR,
+  });
+});
+
 // ---- Export endpoints ----
 app.get("/api/export", requireAuth, (_req, res) => {
   const rawJobs = manager.list();
@@ -244,11 +269,8 @@ app.use((req, res, next) => {
 });
 app.use(express.static(ADMIN_DIR, { extensions: ["html"] }));
 
-app.get("/api/version", (_req, res) => {
-  res.json({ version: "1.1.0" });
-});
-
 app.listen(PORT, () => {
-  console.log(`Telenova WA Archive v1.1.0 online em :${PORT} (público: ${PUBLIC_URL})`);
+  const appVersion = process.env.APP_VERSION || process.env.EXPORTER_VERSION || "1.0.0";
+  console.log(`Telenova WA Archive v${appVersion} online em :${PORT} (público: ${PUBLIC_URL})`);
   console.log(`Concorrência máxima: ${MAX_CONCURRENT} exportação(ões) simultânea(s).`);
 });
