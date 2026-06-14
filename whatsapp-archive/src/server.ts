@@ -14,7 +14,7 @@ const SESSION_DIR = process.env.SESSION_DIR || "/data/sessions";
 const EXPORT_DIR = process.env.EXPORT_DIR || "/data/exports";
 const TMP_DIR = process.env.TMP_DIR || "/data/tmp";
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_EXPORTS || "1", 10);
-const CODE_VERSION = "1.1.4";
+const CODE_VERSION = "1.1.5";
 const APP_VERSION = CODE_VERSION;
 
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) {

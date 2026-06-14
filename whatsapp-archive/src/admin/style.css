@@ -61,12 +61,13 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
 .file-info strong{font-size:14px;overflow-wrap:anywhere}
 .logs{background:#06101f;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:300px;overflow:auto;font-size:12px;white-space:pre-wrap}
 
-#list .item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+#list .item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
 #list .item:last-child{border-bottom:0}
 #list .item .title{font-weight:600}
 #list .item .meta{color:var(--muted);font-size:12px}
 #list .item a.primary{text-decoration:none;text-align:center;white-space:nowrap}
-#list .item-actions{display:flex;gap:8px;align-items:center}
+#list .item-actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:nowrap;min-width:max-content}
+#list .item-actions .ghost,#list .item-actions .primary{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 
 /* login */
 .login-body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at top,#0e1a30,#070c17)}
@@ -85,5 +86,5 @@ legend{padding:0 6px;color:var(--muted);font-size:13px}
   .progress-grid{grid-template-columns:repeat(2,1fr)}
   .file-info{grid-template-columns:1fr}
   #list .item{grid-template-columns:1fr auto}
-  #list .item-actions{grid-column:1/-1;flex-wrap:wrap}
+  #list .item-actions{grid-column:1/-1;justify-content:flex-start;flex-wrap:wrap;min-width:0}
 }
