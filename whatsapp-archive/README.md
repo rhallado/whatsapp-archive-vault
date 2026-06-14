@@ -94,7 +94,7 @@ O compose usa somente `build: ./whatsapp-archive` (ou `build: .` no compose inte
 | `ADMIN_TOKEN` | sim | — | Token de login (mínimo 12 caracteres). |
 | `PUBLIC_URL` | recomendado | `http://localhost:3001` | URL pública da aplicação. |
 | `HOST_PORT` | não | `3001` | Porta exposta no host. |
-| `APP_VERSION` | não | `1.1.2` | Versão da aplicação exibida na UI e nos diagnósticos. |
+| `APP_VERSION` | não | `1.1.3` | Versão da aplicação exibida na UI e nos diagnósticos. |
 | `BUILD_TIME` | não | vazio | Data/hora opcional do build. |
 | `GIT_SHA` | não | vazio | SHA opcional do commit implantado. |
 | `PUPPETEER_PROTOCOL_TIMEOUT_MS` | não | `900000` | Timeout CDP/Puppeteer (15 minutos) para operações longas. |
@@ -143,6 +143,7 @@ Todos exigem o cookie `tn_admin` (definido pelo `POST /api/auth/login`) ou heade
 | GET    | `/api/export/:id/qr`             | QR Code atual (data URL)                        |
 | GET    | `/api/export/:id/status`         | Status + progresso + logs                       |
 | POST   | `/api/export/:id/cancel`         | Cancela importação em andamento                 |
+| POST   | `/api/export/:id/retry`          | Tenta novamente após erro reaproveitando a sessão |
 | GET    | `/api/export/:id/download`       | Baixa o ZIP final                               |
 | POST   | `/api/export/:id/disconnect`     | Para o job, desconecta e remove somente a sessão |
 | DELETE | `/api/export/:id/cleanup`        | Apaga sessão, ZIP e arquivos temporários        |

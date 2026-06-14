@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 const VIEWER_DIR = path.join(__dirname, "viewer");
-const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.0.0";
+const EXPORTER_VERSION = process.env.EXPORTER_VERSION || "1.1.3";
 const MAX_MESSAGES_PER_CHAT = parseInt(process.env.MAX_MESSAGES_PER_CHAT || "20000", 10);
 const SAFE_MODE = (process.env.SAFE_MODE || "true").toLowerCase() === "true";
 const CHAT_DELAY_MS = parseInt(process.env.CHAT_DELAY_MS || "2500", 10);
@@ -56,6 +56,20 @@ function safeName(s: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout em ${label} após ${ms}ms`)), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function chatKey(chat: Chat): string {
@@ -167,10 +181,12 @@ export class ExportJob {
   async stopAndDisconnect() {
     this.cancelled = true;
     if (this.client) {
-      try { await this.client.logout(); } catch { /* a sessão pode já estar desconectada */ }
-      try { await this.client.destroy(); } catch { /* ignore */ }
+      const client = this.client;
+      try { await client.logout(); } catch { /* a sessão pode já estar desconectada */ }
+      try { await client.destroy(); } catch { /* ignore */ }
       this.client = null;
     }
+    await this.removeContactFile();
     const sess = path.join(this.sessionDir, `session-${this.clientId}`);
     await fsp.rm(sess, { recursive: true, force: true }).catch(() => {});
     this.setStatus("disconnected");
@@ -179,7 +195,8 @@ export class ExportJob {
 
   async disconnect() {
     if (this.client) {
-      try { await this.client.destroy(); } catch { /* ignore */ }
+      const client = this.client;
+      try { await client.destroy(); } catch { /* ignore */ }
       this.client = null;
     }
   }
@@ -194,6 +211,13 @@ export class ExportJob {
     this.log("info", "sessão, arquivos temporários e ZIP apagados");
   }
 
+  private async removeContactFile() {
+    if (this.record.options.contactFilePath) {
+      await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
+      this.record.options.contactFilePath = undefined;
+    }
+  }
+
   async start() {
     this.startMs = Date.now();
     this.record.progress.startedAt = nowIso();
@@ -204,6 +228,8 @@ export class ExportJob {
     this.setStatus("connecting");
     this.log("warn", SYNC_NOTICE);
     if (SAFE_MODE) this.log("info", "Modo conservador ativo");
+    this.log("info", `PUPPETEER_PROTOCOL_TIMEOUT_MS=${PUPPETEER_PROTOCOL_TIMEOUT_MS}`);
+    this.log("info", `GET_CHATS_TIMEOUT_MS=${GET_CHATS_TIMEOUT_MS}`);
     this.client = new Client({
       authStrategy: new LocalAuth({ clientId: this.clientId, dataPath: this.sessionDir }),
       puppeteer: {
@@ -216,7 +242,6 @@ export class ExportJob {
           "--disable-gpu",
           "--no-first-run",
           "--no-zygote",
-          "--single-process",
         ],
       },
     });
@@ -243,6 +268,7 @@ export class ExportJob {
 
     this.client.on("disconnected", (reason) => {
       this.log("warn", `WhatsApp desconectado: ${reason}`);
+      this.client = null;
     });
 
     this.client.once("ready", () => {
@@ -254,24 +280,43 @@ export class ExportJob {
       await this.client.initialize();
     } catch (e) {
       this.fail(e as Error);
-      if (this.record.options.contactFilePath) {
-        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
-      }
     }
   }
 
-  private startImportOnce() {
-    if (this.importStarted) {
-      this.log("warn", "evento ready recebido novamente; importação já estava em execução, ignorando");
+  public async retryImport() {
+    if (this.record.status !== "error") {
+      throw new Error(`retry permitido apenas em status error; status atual: ${this.record.status}`);
+    }
+
+    this.cancelled = false;
+    this.record.errorMessage = undefined;
+    this.importStarted = false;
+    this.importFinished = false;
+    this.importPromise = null;
+
+    if (!this.client) {
+      this.log("warn", "client não existe mais; reinicializando com a mesma sessão LocalAuth");
+      await this.start();
       return;
     }
 
-    if (["finished", "cancelled", "error", "disconnected"].includes(this.record.status)) {
+    this.log("info", "tentando novamente usando a sessão WhatsApp atual");
+    this.startImportOnce({ force: true });
+  }
+
+  private startImportOnce(options?: { force?: boolean }) {
+    if (this.importStarted && !options?.force) {
+      this.log("warn", "importação já estava em execução, ignorando");
+      return;
+    }
+
+    if (!options?.force && ["finished", "cancelled", "error", "disconnected"].includes(this.record.status)) {
       this.log("warn", `evento ready ignorado porque status atual é ${this.record.status}`);
       return;
     }
 
     this.importStarted = true;
+    this.importFinished = false;
     this.importPromise = this.runImport()
       .then(() => { this.importFinished = true; })
       .catch((e) => this.fail(e as Error));
@@ -303,6 +348,7 @@ export class ExportJob {
       if (!this.client) throw new Error("cliente WhatsApp não inicializado");
       const opts = this.record.options;
 
+      this.startMs = Date.now();
       this.record.progress.chatsFound = 0;
       this.record.progress.chatsImported = 0;
       this.record.progress.messagesImported = 0;
@@ -310,13 +356,13 @@ export class ExportJob {
       this.record.progress.mediaFailed = 0;
       this.record.progress.errors = 0;
       this.record.progress.elapsedMs = 0;
+      this.record.progress.startedAt = nowIso();
+      this.record.progress.finishedAt = undefined;
 
       this.log("info", `MAX_MESSAGES_PER_CHAT=${MAX_MESSAGES_PER_CHAT}`);
       this.log("info", `DEEP_HISTORY_MODE=${DEEP_HISTORY_MODE}`);
       this.log("info", `MAX_CHATS_PER_RUN=${MAX_CHATS_PER_RUN}`);
       this.log("info", `MAX_MEDIA_PER_RUN=${MAX_MEDIA_PER_RUN}`);
-      this.log("info", `PUPPETEER_PROTOCOL_TIMEOUT_MS=${PUPPETEER_PROTOCOL_TIMEOUT_MS}`);
-      this.log("info", `GET_CHATS_TIMEOUT_MS=${GET_CHATS_TIMEOUT_MS}`);
       if (DEEP_HISTORY_MODE && INITIAL_SYNC_WAIT_MS > 0) {
         this.log("info", `aguardando sincronização inicial por ${INITIAL_SYNC_WAIT_MS}ms`);
         await sleep(INITIAL_SYNC_WAIT_MS);
@@ -324,19 +370,15 @@ export class ExportJob {
       }
 
       this.setStatus("listing_chats");
-      this.log("info", `iniciando getChats() com timeout ${GET_CHATS_TIMEOUT_MS}ms e protocolTimeout ${PUPPETEER_PROTOCOL_TIMEOUT_MS}ms`);
+      this.log("info", `iniciando getChats() com timeout ${GET_CHATS_TIMEOUT_MS}ms`);
       let rawChats: Chat[];
       try {
-        rawChats = await Promise.race([
-          this.client.getChats(),
-          sleep(GET_CHATS_TIMEOUT_MS).then(() => {
-            throw new Error(`timeout em getChats após ${GET_CHATS_TIMEOUT_MS}ms`);
-          }),
-        ]);
+        rawChats = await withTimeout(this.client.getChats(), GET_CHATS_TIMEOUT_MS, "getChats()");
       } catch (error) {
         const message = (error as Error).message || String(error);
-        if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || message.includes("timeout em getChats")) {
-          const friendly = "Timeout ao listar chats no WhatsApp Web. A conta pode ter muitas conversas ou o servidor pode estar sobrecarregado. Aumente PUPPETEER_PROTOCOL_TIMEOUT_MS/GET_CHATS_TIMEOUT_MS ou tente novamente com menos carga.";
+        const stack = (error as Error).stack || "";
+        if (message.includes("Runtime.callFunctionOn timed out") || message.includes("ProtocolError") || stack.includes("ProtocolError") || message.includes("timeout em getChats")) {
+          const friendly = "Timeout ao listar chats no WhatsApp Web. A sessão está autenticada, mas o WhatsApp Web demorou demais para retornar as conversas. Você pode tentar novamente sem ler novo QR Code.";
           this.log("error", friendly);
           throw new Error(friendly, { cause: error });
         }
@@ -515,10 +557,7 @@ export class ExportJob {
       }
       this.fail(e as Error);
     } finally {
-      if (this.record.options.contactFilePath) {
-        await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
-        this.record.options.contactFilePath = undefined;
-      }
+      if (["finished", "cancelled", "disconnected"].includes(this.record.status)) await this.removeContactFile();
     }
   }
 
