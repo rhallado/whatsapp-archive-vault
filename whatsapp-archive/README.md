@@ -81,6 +81,8 @@ Acesse: `http://<seu-host>:3001` → faça login com o `ADMIN_TOKEN`.
 6. (Opcional) Configure um reverse proxy (Nginx/Caddy/Traefik) na frente
    apontando para o container e use HTTPS com domínio próprio.
 
+O compose usa somente `build: ./whatsapp-archive` (ou `build: .` no compose interno), sem `image:`. Assim, o Portainer constrói o container a partir do commit obtido do Git em vez de tentar baixar uma imagem privada do Docker Hub.
+
 > **HTTPS recomendado em produção.** Sem TLS, o `ADMIN_TOKEN` trafega em texto claro.
 
 ---
@@ -92,6 +94,9 @@ Acesse: `http://<seu-host>:3001` → faça login com o `ADMIN_TOKEN`.
 | `ADMIN_TOKEN` | sim | — | Token de login (mínimo 12 caracteres). |
 | `PUBLIC_URL` | recomendado | `http://localhost:3001` | URL pública da aplicação. |
 | `HOST_PORT` | não | `3001` | Porta exposta no host. |
+| `APP_VERSION` | não | `1.1.1` | Versão da aplicação exibida na UI e nos diagnósticos. |
+| `BUILD_TIME` | não | vazio | Data/hora opcional do build. |
+| `GIT_SHA` | não | vazio | SHA opcional do commit implantado. |
 | `MAX_MESSAGES_PER_CHAT` | não | `20000` | Máximo de mensagens solicitadas por conversa. |
 | `MAX_CONCURRENT_EXPORTS` | não | `1` | Exportações simultâneas. |
 | `SAFE_MODE` | não | `true` | Ativa pausas técnicas entre operações. |
@@ -129,6 +134,8 @@ Todos exigem o cookie `tn_admin` (definido pelo `POST /api/auth/login`) ou heade
 | POST   | `/api/auth/login`                | Login (`{ token }`)                             |
 | POST   | `/api/auth/logout`               | Logout                                          |
 | GET    | `/api/auth/me`                   | Status de autenticação                          |
+| GET    | `/api/version`                   | Versão e identificação do build                 |
+| GET    | `/api/health`                    | Saúde, uptime e diretórios ativos               |
 | GET    | `/api/export`                    | Lista jobs em memória e ZIPs físicos persistidos |
 | POST   | `/api/export/start`              | Cria exportação; aceita multipart com `options` e agenda `contacts` |
 | GET    | `/api/export/:id/qr`             | QR Code atual (data URL)                        |
