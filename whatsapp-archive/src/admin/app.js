@@ -140,7 +140,7 @@
     dl.classList.toggle('hidden', !s.zipFileName);
     if (s.zipFileName) { dl.classList.remove('disabled'); dl.href = s.downloadUrl || `/api/export/${currentId}/download`; dl.setAttribute('download', s.zipFileName); }
 
-    const activeStatuses = ['created', 'connecting', 'qr_ready', 'authenticated', 'listing_chats', 'importing_messages', 'downloading_media', 'building_index', 'building_viewer', 'zipping'];
+    const activeStatuses = ['created', 'connecting', 'qr_ready', 'authenticated', 'ready', 'listing_chats', 'importing_messages', 'downloading_media', 'building_index', 'building_viewer', 'zipping'];
     $('d-retry').classList.toggle('hidden', s.canRetry !== true);
     $('d-cancel').classList.toggle('hidden', !activeStatuses.includes(s.status));
     $('d-disconnect').classList.toggle('hidden', isFile || s.status === 'disconnected');
