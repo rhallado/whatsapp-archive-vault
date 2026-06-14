@@ -340,6 +340,7 @@ export class ExportJob {
       if (!this.client) throw new Error("cliente WhatsApp não inicializado");
       const opts = this.record.options;
 
+      this.startMs = Date.now();
       this.record.progress.chatsFound = 0;
       this.record.progress.chatsImported = 0;
       this.record.progress.messagesImported = 0;
