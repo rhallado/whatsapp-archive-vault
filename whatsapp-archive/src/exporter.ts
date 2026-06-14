@@ -185,6 +185,7 @@ export class ExportJob {
       try { await this.client.destroy(); } catch { /* ignore */ }
       this.client = null;
     }
+    await this.removeContactFile();
     const sess = path.join(this.sessionDir, `session-${this.clientId}`);
     await fsp.rm(sess, { recursive: true, force: true }).catch(() => {});
     this.setStatus("disconnected");
@@ -206,6 +207,13 @@ export class ExportJob {
       this.record.zipPath = undefined;
     }
     this.log("info", "sessão, arquivos temporários e ZIP apagados");
+  }
+
+  private async removeContactFile() {
+    if (this.record.options.contactFilePath) {
+      await fsp.rm(this.record.options.contactFilePath, { force: true }).catch(() => {});
+      this.record.options.contactFilePath = undefined;
+    }
   }
 
   async start() {
