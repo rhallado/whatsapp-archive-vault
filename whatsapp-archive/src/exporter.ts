@@ -266,6 +266,7 @@ export class ExportJob {
 
     this.client.on("disconnected", (reason) => {
       this.log("warn", `WhatsApp desconectado: ${reason}`);
+      this.client = null;
     });
 
     this.client.once("ready", () => {
